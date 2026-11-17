@@ -3,9 +3,8 @@
 **Branch:** `field-test-preparation` (NEVER merge to `main` without explicit approval)
 
 ## Completed
-- [x] Replace destructive `DROP TABLE ... CASCADE` in `supabase/schema.sql` with safe idempotent migrations preserving `users`, `free_quotas`, and `sessions`.
-- [x] Add `get_revoked_sessions(INTEGER)` RPC, `verify-mac?action=revoked`, and 30s `rawad-sync-revocations` scheduler in `deploy.rsc` / `rollback.rsc` so disabled/expired active users are removed from `rawad-verified` behind NAT.
-- [x] Sanitize DB error messages in `portal-auth/index.ts`.
-- [x] Expand `tests/verify_system.mjs` to verify idempotent `schema.sql` re-apply, `get_revoked_sessions`, `verify_mac_authorization`, and static/security invariants.
-- [x] Document first-admin creation, 30s revocation sync bound, and MAC verification boundary in `DEPLOYMENT.md`.
+- [x] Fix `public.get_revoked_sessions()` to detect ALL disabled/expired sessions regardless of `created_at` age.
+- [x] Add `revoked_at` + `revocation_ack_at` + `ack_revoked_sessions(UUID[])` so revocations are never lost when router is temporarily unreachable and never returned repeatedly once acknowledged.
+- [x] Update `admin-api` (`revoked_at`), `verify-mac` (`?action=revoked` & `?action=ack`), and `routeros/deploy.rsc` (`rawad-sync-revocations`).
+- [x] Expand `tests/verify_system.mjs` with +2h disabled session test, +4h expired session test, failed-ack retry test, post-ack suppression test, and `sessions` preservation on `schema.sql` re-apply.
 - [ ] Live MikroTik RB4011 (`ether10`) + Live Supabase Edge Function integration test (requires isolated lab router + test Supabase project).

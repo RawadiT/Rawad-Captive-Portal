@@ -69,10 +69,14 @@ CREATE TABLE IF NOT EXISTS public.sessions (
   started_at TIMESTAMPTZ NOT NULL,
   expires_at TIMESTAMPTZ NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('authorized', 'active', 'expired', 'disconnected')),
+  revoked_at TIMESTAMPTZ NULL,
+  revocation_ack_at TIMESTAMPTZ NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Safe idempotent migration for legacy sessions rows/constraints
+-- Safe idempotent migration for legacy sessions rows/columns/constraints
+ALTER TABLE public.sessions ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ NULL;
+ALTER TABLE public.sessions ADD COLUMN IF NOT EXISTS revocation_ack_at TIMESTAMPTZ NULL;
 UPDATE public.sessions
 SET status = 'disconnected'
 WHERE status NOT IN ('authorized', 'active', 'expired', 'disconnected');
@@ -345,18 +349,22 @@ SET search_path = pg_catalog, public
 AS $$
 DECLARE
   v_mac TEXT := UPPER(TRIM(COALESCE(p_mac, '')));
+  v_now TIMESTAMPTZ := clock_timestamp();
 BEGIN
   UPDATE public.sessions
-  SET status = 'disconnected'
+  SET status = 'disconnected',
+      revoked_at = COALESCE(revoked_at, v_now)
   WHERE mac_address = v_mac AND status IN ('authorized', 'active');
 END;
 $$;
 
--- 5. Return recently disabled/expired sessions whose router access should be revoked
+-- 5. Return ALL unacknowledged disabled/expired sessions regardless of session created_at age
+DROP FUNCTION IF EXISTS public.get_revoked_sessions(INTEGER);
 CREATE OR REPLACE FUNCTION public.get_revoked_sessions(
-  p_lookback_seconds INTEGER DEFAULT 300
+  p_now TIMESTAMPTZ DEFAULT NULL
 )
 RETURNS TABLE (
+  session_id UUID,
   mac_address TEXT,
   ip_address TEXT
 )
@@ -365,27 +373,63 @@ SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
-  v_now TIMESTAMPTZ := clock_timestamp();
+  v_now TIMESTAMPTZ := COALESCE(p_now, clock_timestamp());
 BEGIN
-  -- Mark any expired active/authorized sessions as expired
+  -- Mark any expired active/authorized sessions as expired (regardless of created_at)
   UPDATE public.sessions s
-  SET status = 'expired'
+  SET status = 'expired',
+      revoked_at = COALESCE(s.revoked_at, v_now)
   WHERE s.status IN ('authorized', 'active')
     AND s.expires_at <= v_now;
 
-  -- Mark any active/authorized sessions of disabled users as disconnected
+  -- Mark any active/authorized sessions of disabled users as disconnected (regardless of created_at)
   UPDATE public.sessions s
-  SET status = 'disconnected'
+  SET status = 'disconnected',
+      revoked_at = COALESCE(s.revoked_at, v_now)
   FROM public.users u
   WHERE s.user_id = u.id
     AND u.is_disabled = true
     AND s.status IN ('authorized', 'active');
 
+  -- Return all pending revocations not yet acknowledged by the router
   RETURN QUERY
-  SELECT DISTINCT s.mac_address, s.ip_address
+  SELECT s.id, s.mac_address, s.ip_address
   FROM public.sessions s
   WHERE s.status IN ('expired', 'disconnected')
-    AND s.created_at >= v_now - make_interval(secs => GREATEST(60, p_lookback_seconds));
+    AND s.revoked_at IS NOT NULL
+    AND s.revocation_ack_at IS NULL
+  ORDER BY s.revoked_at ASC;
+END;
+$$;
+
+-- 6. Acknowledge revocations ONLY after router removed rawad-verified / HotSpot active
+CREATE OR REPLACE FUNCTION public.ack_revoked_sessions(
+  p_session_ids UUID[]
+)
+RETURNS INTEGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_count INTEGER;
+BEGIN
+  IF p_session_ids IS NULL OR array_length(p_session_ids, 1) IS NULL THEN
+    RETURN 0;
+  END IF;
+
+  WITH acked AS (
+    UPDATE public.sessions s
+    SET revocation_ack_at = COALESCE(s.revocation_ack_at, clock_timestamp())
+    WHERE s.id = ANY(p_session_ids)
+      AND s.status IN ('expired', 'disconnected')
+      AND s.revoked_at IS NOT NULL
+      AND s.revocation_ack_at IS NULL
+    RETURNING s.id
+  )
+  SELECT COUNT(*)::INTEGER INTO v_count FROM acked;
+
+  RETURN COALESCE(v_count, 0);
 END;
 $$;
 
@@ -401,5 +445,8 @@ GRANT EXECUTE ON FUNCTION public.verify_mac_authorization(TEXT, TEXT, TIMESTAMPT
 REVOKE ALL ON FUNCTION public.disconnect_mac_session(TEXT) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.disconnect_mac_session(TEXT) TO service_role;
 
-REVOKE ALL ON FUNCTION public.get_revoked_sessions(INTEGER) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.get_revoked_sessions(INTEGER) TO service_role;
+REVOKE ALL ON FUNCTION public.get_revoked_sessions(TIMESTAMPTZ) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.get_revoked_sessions(TIMESTAMPTZ) TO service_role;
+
+REVOKE ALL ON FUNCTION public.ack_revoked_sessions(UUID[]) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.ack_revoked_sessions(UUID[]) TO service_role;

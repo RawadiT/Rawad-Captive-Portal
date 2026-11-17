@@ -149,7 +149,11 @@ Deno.serve(async (req) => {
     if (error) return json({ error: error.message }, 400);
     if (!data) return json({ error: 'الحساب غير موجود' }, 404);
     if (isDisabled) {
-      await db.from('sessions').update({ status: 'disconnected' }).eq('user_id', userId).in('status', ['authorized', 'active']);
+      await db
+        .from('sessions')
+        .update({ status: 'disconnected', revoked_at: new Date().toISOString() })
+        .eq('user_id', userId)
+        .in('status', ['authorized', 'active']);
     }
     return json({ user: toPublicUser(data) });
   }

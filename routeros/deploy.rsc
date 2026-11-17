@@ -312,19 +312,29 @@
   "  :local res [/tool fetch url=(\"https://\" . \$supaHost . \"/functions/v1/verify-mac?action=revoked\") http-header-field=(\"x-router-secret:\" . \$sec) output=user as-value];\n" . \
   "  :if ((\$res->\"status\") = \"finished\") do={\n" . \
   "    :local body (\$res->\"data\");\n" . \
+  "    :local ackIds \"\";\n" . \
   "    :local pos 0;\n" . \
   "    :local blen [:len \$body];\n" . \
   "    :while (\$pos < \$blen) do={\n" . \
   "      :local nl [:find \$body \"\\n\" \$pos];\n" . \
   "      :local line \"\";\n" . \
   "      :if ([:typeof \$nl] = \"num\") do={ :set line [:pick \$body \$pos \$nl]; :set pos (\$nl + 1); } else={ :set line [:pick \$body \$pos \$blen]; :set pos \$blen; }\n" . \
-  "      :local sep [:find \$line \"|\"];\n" . \
-  "      :if ([:typeof \$sep] = \"num\") do={\n" . \
-  "        :local rMac [:pick \$line 0 \$sep];\n" . \
-  "        :local rIp [:pick \$line (\$sep + 1) [:len \$line]];\n" . \
-  "        /ip firewall address-list remove [find where list=\"rawad-verified\" && address=\$rIp && comment=\"rawad-guest-portal\"];\n" . \
-  "        /ip hotspot active remove [find where mac-address=\$rMac];\n" . \
+  "      :local sep1 [:find \$line \"|\"];\n" . \
+  "      :if ([:typeof \$sep1] = \"num\") do={\n" . \
+  "        :local rId [:pick \$line 0 \$sep1];\n" . \
+  "        :local rest [:pick \$line (\$sep1 + 1) [:len \$line]];\n" . \
+  "        :local sep2 [:find \$rest \"|\"];\n" . \
+  "        :if ([:typeof \$sep2] = \"num\") do={\n" . \
+  "          :local rMac [:pick \$rest 0 \$sep2];\n" . \
+  "          :local rIp [:pick \$rest (\$sep2 + 1) [:len \$rest]];\n" . \
+  "          /ip firewall address-list remove [find where list=\"rawad-verified\" && address=\$rIp && comment=\"rawad-guest-portal\"];\n" . \
+  "          /ip hotspot active remove [find where mac-address=\$rMac];\n" . \
+  "          :if (\$ackIds = \"\") do={ :set ackIds \$rId; } else={ :set ackIds (\$ackIds . \",\" . \$rId); }\n" . \
+  "        }\n" . \
   "      }\n" . \
+  "    }\n" . \
+  "    :if (\$ackIds != \"\") do={\n" . \
+  "      /tool fetch url=(\"https://\" . \$supaHost . \"/functions/v1/verify-mac?action=ack&ids=\" . \$ackIds) http-header-field=(\"x-router-secret:\" . \$sec) output=user as-value;\n" . \
   "    }\n" . \
   "  }\n" . \
   "} on-error={}")

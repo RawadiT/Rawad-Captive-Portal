@@ -29,13 +29,24 @@ Deno.serve(async (req) => {
   });
 
   if (action === 'revoked') {
-    const { data, error } = await db.rpc('get_revoked_sessions', { p_lookback_seconds: 300 });
+    const { data, error } = await db.rpc('get_revoked_sessions');
     if (error) return text('ERR:db_error', 500);
     const rows = Array.isArray(data) ? data : [];
     const lines = rows
-      .filter((r) => r?.mac_address && r?.ip_address)
-      .map((r) => `${r.mac_address}|${r.ip_address}`);
+      .filter((r) => r?.session_id && r?.mac_address && r?.ip_address)
+      .map((r) => `${r.session_id}|${r.mac_address}|${r.ip_address}`);
     return text(lines.join('\n'), 200);
+  }
+
+  if (action === 'ack') {
+    const rawIds = (url.searchParams.get('ids') ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s));
+    if (rawIds.length === 0) return text('ACK:0', 200);
+    const { data, error } = await db.rpc('ack_revoked_sessions', { p_session_ids: rawIds });
+    if (error) return text('ERR:db_error', 500);
+    return text(`ACK:${Number(data ?? 0)}`, 200);
   }
 
   const mac = (url.searchParams.get('mac') ?? '').trim().toUpperCase();

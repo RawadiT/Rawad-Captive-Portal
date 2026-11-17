@@ -1,15 +1,13 @@
 # PROGRESS.md — Rawad Captive Portal
 
 **Branch:** `field-test-preparation`  
-**Status:** Schema Migration & Revocation Sync Hardened; Ready for Lab MikroTik + Test Supabase Verification
+**Status:** Revocation Acknowledgement & Age-Independent Detection Complete; Verified in GitHub Actions PG 16
 
-## Changes Completed in This Pass
-- **`supabase/schema.sql`:** Removed `DROP TABLE ... CASCADE`; added idempotent `ALTER TABLE` / constraint migration preserving existing `users`, `free_quotas`, and `sessions`; added `get_revoked_sessions(INTEGER)`.
-- **`supabase/functions/verify-mac/index.ts` & `portal-auth/index.ts`:** Added `?action=revoked` endpoint for router revocation sync and sanitized error messages in `portal-auth`.
-- **`routeros/deploy.rsc` & `rollback.rsc`:** Added 30s `rawad-sync-revocations` scheduler (`ether10` / `rawad-verified` cleanup) with exact `.id` tracking in `rollback.rsc`.
-- **`tests/verify_system.mjs`:** Added idempotent schema re-apply test (verifies data & consumed quota preserved) and disabled-user `get_revoked_sessions` test.
-- **`DEPLOYMENT.md`:** Documented first-admin creation, 30s NAT revocation sync bound, and MAC verification model.
+## Changes Completed
+- **`supabase/schema.sql`:** Added `revoked_at` & `revocation_ack_at` to `sessions`, updated `get_revoked_sessions(TIMESTAMPTZ)` to detect all disabled/expired sessions regardless of `created_at`, and added `ack_revoked_sessions(UUID[])`.
+- **`supabase/functions/verify-mac/index.ts` & `admin-api/index.ts`:** Added `ID|MAC|IP` revocation feed (`?action=revoked`), acknowledgement endpoint (`?action=ack&ids=...`), and `revoked_at` on user disable.
+- **`routeros/deploy.rsc`:** Updated `rawad-sync-revocations` to remove `rawad-verified` + `/ip hotspot active` first and only then send `action=ack`.
+- **`tests/verify_system.mjs`:** Added +2h disable, +4h expiry, unacknowledged retry, post-ack suppression, and `sessions` preservation on `schema.sql` re-apply tests.
 
 ## Not Tested Locally
-- Actual RouterOS execution (`deploy.rsc`, `rollback.rsc`, `on-login` `/tool fetch`, `rawad-sync-revocations`) on a physical MikroTik RB4011.
-- Live Deno Edge Function deployment on Supabase.
+- Live MikroTik RB4011 (`ether10`) & Live Supabase Deno Edge Function deployment (`NOT RUN`).
