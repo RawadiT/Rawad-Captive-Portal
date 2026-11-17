@@ -313,6 +313,7 @@
   "  :if ((\$res->\"status\") = \"finished\") do={\n" . \
   "    :local body (\$res->\"data\");\n" . \
   "    :local ackIds \"\";\n" . \
+  "    :local batchCount 0;\n" . \
   "    :local pos 0;\n" . \
   "    :local blen [:len \$body];\n" . \
   "    :while (\$pos < \$blen) do={\n" . \
@@ -330,11 +331,23 @@
   "          /ip firewall address-list remove [find where list=\"rawad-verified\" && address=\$rIp && comment=\"rawad-guest-portal\"];\n" . \
   "          /ip hotspot active remove [find where mac-address=\$rMac];\n" . \
   "          :if (\$ackIds = \"\") do={ :set ackIds \$rId; } else={ :set ackIds (\$ackIds . \",\" . \$rId); }\n" . \
+  "          :set batchCount (\$batchCount + 1);\n" . \
+  "          :if (\$batchCount >= 10) do={\n" . \
+  "            :do {\n" . \
+  "              :local ackRes [/tool fetch url=(\"https://\" . \$supaHost . \"/functions/v1/verify-mac?action=ack&ids=\" . \$ackIds) http-header-field=(\"x-router-secret:\" . \$sec) output=user as-value];\n" . \
+  "              :if ((\$ackRes->\"status\") != \"finished\" || [:pick (\$ackRes->\"data\") 0 4] != \"ACK:\") do={}\n" . \
+  "            } on-error={}\n" . \
+  "            :set ackIds \"\";\n" . \
+  "            :set batchCount 0;\n" . \
+  "          }\n" . \
   "        }\n" . \
   "      }\n" . \
   "    }\n" . \
   "    :if (\$ackIds != \"\") do={\n" . \
-  "      /tool fetch url=(\"https://\" . \$supaHost . \"/functions/v1/verify-mac?action=ack&ids=\" . \$ackIds) http-header-field=(\"x-router-secret:\" . \$sec) output=user as-value;\n" . \
+  "      :do {\n" . \
+  "        :local ackRes [/tool fetch url=(\"https://\" . \$supaHost . \"/functions/v1/verify-mac?action=ack&ids=\" . \$ackIds) http-header-field=(\"x-router-secret:\" . \$sec) output=user as-value];\n" . \
+  "        :if ((\$ackRes->\"status\") != \"finished\" || [:pick (\$ackRes->\"data\") 0 4] != \"ACK:\") do={}\n" . \
+  "      } on-error={}\n" . \
   "    }\n" . \
   "  }\n" . \
   "} on-error={}")

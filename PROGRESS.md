@@ -1,13 +1,11 @@
 # PROGRESS.md — Rawad Captive Portal
 
 **Branch:** `field-test-preparation`  
-**Status:** Revocation Acknowledgement & Age-Independent Detection Complete; Verified in GitHub Actions PG 16
+**Status:** Genuine Old-Session Tests & Batched Router ACK Complete; Verified in GitHub Actions PG 16
 
 ## Changes Completed
-- **`supabase/schema.sql`:** Added `revoked_at` & `revocation_ack_at` to `sessions`, updated `get_revoked_sessions(TIMESTAMPTZ)` to detect all disabled/expired sessions regardless of `created_at`, and added `ack_revoked_sessions(UUID[])`.
-- **`supabase/functions/verify-mac/index.ts` & `admin-api/index.ts`:** Added `ID|MAC|IP` revocation feed (`?action=revoked`), acknowledgement endpoint (`?action=ack&ids=...`), and `revoked_at` on user disable.
-- **`routeros/deploy.rsc`:** Updated `rawad-sync-revocations` to remove `rawad-verified` + `/ip hotspot active` first and only then send `action=ack`.
-- **`tests/verify_system.mjs`:** Added +2h disable, +4h expiry, unacknowledged retry, post-ack suppression, and `sessions` preservation on `schema.sql` re-apply tests.
+- **`tests/verify_system.mjs`:** Explicitly backdated `created_at` to `t0` for `sessLong` and `sessExp`, asserted `>= 7200s` (+2h) and `>= 14400s` (+4h) age + `expires_at < p_now`, verified `revoked_at` and `revocation_ack_at` preservation on `schema.sql` re-apply, and added regression check against `s.created_at` lookback.
+- **`routeros/deploy.rsc`:** Batched `action=ack` requests (max 10 IDs per `/tool fetch` for safe URL length) and verified `status = "finished"` + `"ACK:"` prefix.
 
 ## Not Tested Locally
 - Live MikroTik RB4011 (`ether10`) & Live Supabase Deno Edge Function deployment (`NOT RUN`).

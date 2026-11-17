@@ -72,8 +72,11 @@ assert.match(rollbackRsc, /\/system script remove \$stateSid/);
 assert.match(rollbackRsc, /\/system script remove \$anchorSid/);
 assert.match(rollbackRsc, /\$rawadCreatedSched = true/);
 
-// SQL schema checks: NO destructive DROP TABLE CASCADE, Asia/Baghdad daily quota, RLS, service_role-only grants
+// SQL schema checks: NO destructive DROP TABLE CASCADE, NO created_at lookback in get_revoked_sessions, Asia/Baghdad daily quota, RLS
 assert.ok(!/DROP TABLE\b/i.test(schemaSql), 'schema.sql must NOT drop tables on re-apply');
+assert.ok(!/s\.created_at\s*>=\s*v_now\s*-\s*make_interval/i.test(schemaSql), 'get_revoked_sessions must NOT filter by s.created_at lookback');
+assert.match(deployRsc, /\$batchCount >= 10/);
+assert.match(deployRsc, /!= \\"ACK:\\"/);
 assert.match(schemaSql, /AT TIME ZONE 'Asia\/Baghdad'/i);
 assert.match(schemaSql, /PRIMARY KEY \(mac_address, quota_date\)/i);
 assert.match(schemaSql, /ALTER TABLE public\.free_quotas ENABLE ROW LEVEL SECURITY/i);
@@ -156,7 +159,7 @@ if (pgExec) {
     const vDisabled = pgExec(`SELECT allowed, remaining_seconds FROM public.verify_mac_authorization('${testMac2}', '192.168.20.12', '2026-11-17T11:30:00Z'::timestamptz);`);
     assert.equal(vDisabled, 'f|0');
 
-    // Also test a 2-hour-old active session whose user is disabled 2 hours later -> get_revoked_sessions MUST catch it!
+    // 1. Genuinely old (+2h) active session whose user is disabled 2 hours later -> get_revoked_sessions MUST catch it!
     const t0 = '2026-11-17T08:00:00Z';
     const tPlus2h = '2026-11-17T10:00:00Z';
     const tPlus4h = '2026-11-17T12:00:00Z';
@@ -164,15 +167,18 @@ if (pgExec) {
     const macLong = '02:AA:BB:CC:DD:04';
     const sessLong = pgExec(`SELECT session_id FROM public.authorize_user_login('${uidLong}', '${macLong}', '192.168.20.14', '${t0}'::timestamptz);`);
     pgExec(`SELECT public.verify_mac_authorization('${macLong}', '192.168.20.14', '${t0}'::timestamptz);`);
+    pgExec(`UPDATE public.sessions SET created_at = '${t0}'::timestamptz WHERE id = '${sessLong}';`);
+    const ageLongSec = Number(pgExec(`SELECT FLOOR(EXTRACT(EPOCH FROM ('${tPlus2h}'::timestamptz - created_at))) FROM public.sessions WHERE id = '${sessLong}';`));
+    assert.ok(ageLongSec >= 7200, `Expected sessLong age >= 7200s, got ${ageLongSec}s`);
 
     // Advance 2 hours -> disable user -> must appear in get_revoked_sessions immediately regardless of created_at
     pgExec(`UPDATE public.users SET is_disabled = true WHERE id = '${uidLong}';`);
     const rev1 = pgExec(`SELECT session_id || '|' || mac_address || '|' || ip_address FROM public.get_revoked_sessions('${tPlus2h}'::timestamptz);`);
     assert.ok(rev1.includes(`${sessLong}|${macLong}|192.168.20.14`), '2h-old disabled session must appear in get_revoked_sessions');
 
-    // Simulate router unreachable / missed ack -> calling get_revoked_sessions again MUST still return it!
+    // Simulate router unreachable / failed ACK -> calling get_revoked_sessions again MUST still return it!
     const revRetry = pgExec(`SELECT session_id FROM public.get_revoked_sessions('${tPlus2h}'::timestamptz);`);
-    assert.ok(revRetry.includes(sessLong), 'Unacknowledged revocation must NOT be lost on router failure');
+    assert.ok(revRetry.includes(sessLong), 'Unacknowledged revocation must NOT be lost on failed ACK');
 
     // Acknowledge revocation -> must NOT be returned again
     const ackCount = Number(pgExec(`SELECT public.ack_revoked_sessions(ARRAY['${sessLong}']::uuid[]);`));
@@ -180,11 +186,14 @@ if (pgExec) {
     const revAfterAck = pgExec(`SELECT session_id FROM public.get_revoked_sessions('${tPlus2h}'::timestamptz);`);
     assert.ok(!revAfterAck.includes(sessLong), 'Acknowledged revocation must NOT be returned repeatedly');
 
-    // Test user account expiring 4 hours after session creation (duration 180m = 3h)
+    // 2. Genuinely old (+4h) session expiring 4 hours after creation (duration 180m = 3h)
     const uidExp = pgExec(`INSERT INTO public.users (username, password_hash, duration_minutes) VALUES ('${testUser}_exp', 'pbkdf2:00:00', 180) RETURNING id;`);
     const macExp = '02:AA:BB:CC:DD:05';
     const sessExp = pgExec(`SELECT session_id FROM public.authorize_user_login('${uidExp}', '${macExp}', '192.168.20.15', '${t0}'::timestamptz);`);
     pgExec(`SELECT public.verify_mac_authorization('${macExp}', '192.168.20.15', '${t0}'::timestamptz);`);
+    pgExec(`UPDATE public.sessions SET created_at = '${t0}'::timestamptz WHERE id = '${sessExp}';`);
+    const expChecks = pgExec(`SELECT (EXTRACT(EPOCH FROM ('${tPlus4h}'::timestamptz - created_at)) >= 14400)::text || '|' || (expires_at < '${tPlus4h}'::timestamptz)::text FROM public.sessions WHERE id = '${sessExp}';`);
+    assert.equal(expChecks, 't|t', 'sessExp must have created_at >= 4h older than p_now and expires_at < p_now');
     const revExp = pgExec(`SELECT session_id FROM public.get_revoked_sessions('${tPlus4h}'::timestamptz);`);
     assert.ok(revExp.includes(sessExp), 'Expired session long after creation must appear in get_revoked_sessions');
     pgExec(`SELECT public.ack_revoked_sessions(ARRAY['${sessExp}']::uuid[]);`);
@@ -193,22 +202,22 @@ if (pgExec) {
     const vUnknown = pgExec(`SELECT allowed, remaining_seconds FROM public.verify_mac_authorization('02:FF:FF:FF:FF:FF', '192.168.20.99', '2026-11-17T11:30:00Z'::timestamptz);`);
     assert.equal(vUnknown, 'f|0');
 
-    // Idempotent re-apply of schema.sql MUST preserve existing users, free_quotas, AND sessions!
+    // Idempotent re-apply of schema.sql MUST preserve existing users, free_quotas, AND sessions (including revoked_at & revocation_ack_at)!
     const usersBefore = Number(pgExec(`SELECT COUNT(*) FROM public.users WHERE id IN ('${uid}', '${uidLong}', '${uidExp}');`));
     const quotasBefore = Number(pgExec(`SELECT COUNT(*) FROM public.free_quotas WHERE mac_address = '${macSameDay}';`));
-    const sessionsBefore = Number(pgExec(`SELECT COUNT(*) FROM public.sessions WHERE mac_address IN ('${macLong}', '${macExp}');`));
+    const sessionsBefore = Number(pgExec(`SELECT COUNT(*) FROM public.sessions WHERE id IN ('${sessLong}', '${sessExp}') AND revoked_at IS NOT NULL AND revocation_ack_at IS NOT NULL;`));
     assert.equal(usersBefore, 3);
     assert.ok(quotasBefore >= 1);
-    assert.ok(sessionsBefore >= 2);
+    assert.equal(sessionsBefore, 2);
 
     pgExec(schemaSql);
 
     const usersAfter = Number(pgExec(`SELECT COUNT(*) FROM public.users WHERE id IN ('${uid}', '${uidLong}', '${uidExp}');`));
     const quotasAfter = Number(pgExec(`SELECT COUNT(*) FROM public.free_quotas WHERE mac_address = '${macSameDay}';`));
-    const sessionsAfter = Number(pgExec(`SELECT COUNT(*) FROM public.sessions WHERE mac_address IN ('${macLong}', '${macExp}');`));
+    const sessionsAfter = Number(pgExec(`SELECT COUNT(*) FROM public.sessions WHERE id IN ('${sessLong}', '${sessExp}') AND revoked_at IS NOT NULL AND revocation_ack_at IS NOT NULL;`));
     assert.equal(usersAfter, usersBefore, 'Re-applying schema.sql must preserve existing users');
     assert.equal(quotasAfter, quotasBefore, 'Re-applying schema.sql must preserve existing free_quotas');
-    assert.equal(sessionsAfter, sessionsBefore, 'Re-applying schema.sql must preserve existing sessions');
+    assert.equal(sessionsAfter, sessionsBefore, 'Re-applying schema.sql must preserve sessions including revoked_at & revocation_ack_at');
 
     const stillExhausted = pgExec(`SELECT allowed, remaining_seconds FROM public.request_free_quota('${macSameDay}', '192.168.20.11', 1800, '2026-11-17T18:35:00Z'::timestamptz);`);
     assert.equal(stillExhausted, 'f|0', 'Consumed free quota must remain exhausted after schema.sql re-apply');

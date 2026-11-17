@@ -4,7 +4,6 @@
 
 ## Completed
 - [x] Fix `public.get_revoked_sessions()` to detect ALL disabled/expired sessions regardless of `created_at` age.
-- [x] Add `revoked_at` + `revocation_ack_at` + `ack_revoked_sessions(UUID[])` so revocations are never lost when router is temporarily unreachable and never returned repeatedly once acknowledged.
-- [x] Update `admin-api` (`revoked_at`), `verify-mac` (`?action=revoked` & `?action=ack`), and `routeros/deploy.rsc` (`rawad-sync-revocations`).
-- [x] Expand `tests/verify_system.mjs` with +2h disabled session test, +4h expired session test, failed-ack retry test, post-ack suppression test, and `sessions` preservation on `schema.sql` re-apply.
+- [x] Add `revoked_at` + `revocation_ack_at` + `ack_revoked_sessions(UUID[])` and batched (10-ID) ACK verification in `routeros/deploy.rsc`.
+- [x] Backdate `created_at` to `t0` in `tests/verify_system.mjs` and assert genuine >=2h and >=4h age + `expires_at < p_now` + `revoked_at`/`revocation_ack_at` preservation across `schema.sql` re-apply.
 - [ ] Live MikroTik RB4011 (`ether10`) + Live Supabase Edge Function integration test (requires isolated lab router + test Supabase project).
