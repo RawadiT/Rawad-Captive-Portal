@@ -66,13 +66,35 @@ async function run() {
   const deleteByIn = async (table, column, values) => {
     if (values.length === 0) return;
     const encoded = values.map((v) => `"${encodeURIComponent(v)}"`).join(',');
-    await fetch(`${supabaseUrl}/rest/v1/${table}?${column}=in.(${encoded})`, {
+    const res = await fetch(`${supabaseUrl}/rest/v1/${table}?${column}=in.(${encoded})`, {
       method: 'DELETE',
       headers: {
         apikey: serviceKey,
         Authorization: `Bearer ${serviceKey}`,
       },
     });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`Cleanup DELETE ${table} failed with HTTP ${res.status}: ${body}`);
+    }
+  };
+
+  const countByIn = async (table, column, values) => {
+    if (values.length === 0) return 0;
+    const encoded = values.map((v) => `"${encodeURIComponent(v)}"`).join(',');
+    const res = await fetch(`${supabaseUrl}/rest/v1/${table}?select=${column}&${column}=in.(${encoded})`, {
+      method: 'GET',
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+      },
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`Cleanup verification GET ${table} failed with HTTP ${res.status}: ${body}`);
+    }
+    const rows = await res.json();
+    return Array.isArray(rows) ? rows.length : 0;
   };
 
   const runSuffix = crypto.randomBytes(4).toString('hex');
@@ -84,6 +106,8 @@ async function run() {
   const createdUserIds = [];
   const createdFreeMacs = [];
   let lockHeld = false;
+  let testsPassed = false;
+  const cleanupErrors = [];
 
   try {
     // 1. ping
@@ -170,14 +194,36 @@ async function run() {
     assert.ok(finUser.started_at, 'finalizeUserSession must set started_at on first login');
     assert.ok(finUser.expires_at, 'finalizeUserSession must set expires_at on first login');
 
-    console.log('ALL LOCAL SUPABASE/POSTGRESQL INTEGRATION TESTS PASSED');
+    testsPassed = true;
   } finally {
+    const tryCleanup = async (label, fn) => {
+      try {
+        await fn();
+      } catch (err) {
+        cleanupErrors.push(`${label}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    };
+
     if (lockHeld) {
-      await db.releaseMonitorLock(lockName, lockOwner).catch(() => {});
+      await tryCleanup('releaseMonitorLock', () => db.releaseMonitorLock(lockName, lockOwner));
     }
-    await deleteByIn('sessions', 'id', createdSessionIds).catch(() => {});
-    await deleteByIn('free_quotas', 'mac_address', createdFreeMacs).catch(() => {});
-    await deleteByIn('users', 'id', createdUserIds).catch(() => {});
+    await tryCleanup('delete sessions', () => deleteByIn('sessions', 'id', createdSessionIds));
+    await tryCleanup('delete free_quotas', () => deleteByIn('free_quotas', 'mac_address', createdFreeMacs));
+    await tryCleanup('delete users', () => deleteByIn('users', 'id', createdUserIds));
+
+    await tryCleanup('verify zero leftover test rows', async () => {
+      assert.equal(await countByIn('sessions', 'id', createdSessionIds), 0, 'Leftover test sessions remain');
+      assert.equal(await countByIn('free_quotas', 'mac_address', createdFreeMacs), 0, 'Leftover test free_quotas remain');
+      assert.equal(await countByIn('users', 'id', createdUserIds), 0, 'Leftover test users remain');
+      assert.equal(await countByIn('monitor_locks', 'lock_name', [lockName]), 0, 'Leftover test monitor_lock remains');
+    });
+  }
+
+  if (cleanupErrors.length > 0) {
+    throw new Error(`Cleanup failed:\n - ${cleanupErrors.join('\n - ')}`);
+  }
+  if (testsPassed) {
+    console.log('ALL LOCAL SUPABASE/POSTGRESQL INTEGRATION TESTS PASSED');
   }
 }
 
