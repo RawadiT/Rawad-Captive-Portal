@@ -134,7 +134,7 @@
 }
 
 :if ([:len [/system script find where name="rawad-portal-state"]] = 0) do={
-    :if ([:len [/ip pool find where name="rawad-guest-pool"]] > 0 || [:len [/ip dhcp-server find where name="rawad-guest-dhcp"]] > 0 || [:len [/ip hotspot profile find where name="rawad-hs-prof"]] > 0 || [:len [/ip hotspot find where name="rawad-guest-hotspot"]] > 0 || [:len [/ip hotspot user profile find where name="rawad-verified-prof"]] > 0 || [:len [/ip hotspot user find where name="rawad-gate"]] > 0 || [:len [/ip hotspot walled-garden find where comment="rawad-guest-portal-allow-supabase"]] > 0 || [:len [/ip firewall nat find where comment="rawad-guest-portal-nat"]] > 0) do={
+    :if ([:len [/ip pool find where name="rawad-guest-pool"]] > 0 || [:len [/ip dhcp-server find where name="rawad-guest-dhcp"]] > 0 || [:len [/ip hotspot profile find where name="rawad-hs-prof"]] > 0 || [:len [/ip hotspot find where name="rawad-guest-hotspot"]] > 0 || [:len [/ip hotspot user profile find where name="rawad-verified-prof"]] > 0 || [:len [/ip hotspot user find where name="rawad-gate"]] > 0 || [:len [/ip hotspot walled-garden find where comment="rawad-guest-portal-allow-supabase"]] > 0 || [:len [/ip firewall nat find where comment="rawad-guest-portal-nat"]] > 0 || [:len [/system scheduler find where name="rawad-sync-revocations"]] > 0) do={
         :error "ABORT: Pre-existing rawad-* resource found without rawad-portal-state. Resolve manually before deploying."
     }
 }
@@ -165,6 +165,7 @@
 :local crFwMgmt false; :local idFwMgmt ""
 :local crV6Fwd false; :local idV6Fwd ""
 :local crV6In false; :local idV6In ""
+:local crSched false; :local idSched ""
 :local idStateScript ""
 
 :if ($isInitialDeploy) do={
@@ -192,6 +193,7 @@
     :set crFwMgmt ([:len [/ip firewall filter find where comment=$cMgmt]] = 0)
     :set crV6Fwd ([:len [/ipv6 firewall filter find where comment=$cV6Fwd]] = 0)
     :set crV6In ([:len [/ipv6 firewall filter find where comment=$cV6In]] = 0)
+    :set crSched ([:len [/system scheduler find where name="rawad-sync-revocations"]] = 0)
 
     :local initSrc (":global rawadPrevDnsRemote " . $prevDns . ";")
     :set idStateScript [/system script add name="rawad-portal-state" source=$initSrc comment="rawad-guest-portal-state"]
@@ -304,6 +306,33 @@
     :set idNat [/ip firewall nat add chain=srcnat src-address=$guestNet dst-address=!192.168.0.0/16 action=masquerade comment="rawad-guest-portal-nat"]
 }
 
+:local revSyncSrc (":local supaHost \"" . $supabaseHost . "\";\n" . \
+  ":local sec \"" . $routerSecret . "\";\n" . \
+  ":do {\n" . \
+  "  :local res [/tool fetch url=(\"https://\" . \$supaHost . \"/functions/v1/verify-mac?action=revoked\") http-header-field=(\"x-router-secret:\" . \$sec) output=user as-value];\n" . \
+  "  :if ((\$res->\"status\") = \"finished\") do={\n" . \
+  "    :local body (\$res->\"data\");\n" . \
+  "    :local pos 0;\n" . \
+  "    :local blen [:len \$body];\n" . \
+  "    :while (\$pos < \$blen) do={\n" . \
+  "      :local nl [:find \$body \"\\n\" \$pos];\n" . \
+  "      :local line \"\";\n" . \
+  "      :if ([:typeof \$nl] = \"num\") do={ :set line [:pick \$body \$pos \$nl]; :set pos (\$nl + 1); } else={ :set line [:pick \$body \$pos \$blen]; :set pos \$blen; }\n" . \
+  "      :local sep [:find \$line \"|\"];\n" . \
+  "      :if ([:typeof \$sep] = \"num\") do={\n" . \
+  "        :local rMac [:pick \$line 0 \$sep];\n" . \
+  "        :local rIp [:pick \$line (\$sep + 1) [:len \$line]];\n" . \
+  "        /ip firewall address-list remove [find where list=\"rawad-verified\" && address=\$rIp && comment=\"rawad-guest-portal\"];\n" . \
+  "        /ip hotspot active remove [find where mac-address=\$rMac];\n" . \
+  "      }\n" . \
+  "    }\n" . \
+  "  }\n" . \
+  "} on-error={}")
+
+:if ([:len [/system scheduler find where name="rawad-sync-revocations"]] = 0) do={
+    :set idSched [/system scheduler add name="rawad-sync-revocations" interval=30s on-event=$revSyncSrc comment="rawad-guest-portal"]
+}
+
 :if ($isInitialDeploy && $idStateScript != "") do={
     :local stateBody (":global rawadPrevDnsRemote " . $prevDns . ";\n" . \
       ":global rawadPrevTz \"" . $prevTz . "\";\n" . \
@@ -335,7 +364,8 @@
       ":global rawadCreatedFwDnsUdp " . $crFwDnsUdp . "; :global rawadIdFwDnsUdp \"" . $idFwDnsUdp . "\";\n" . \
       ":global rawadCreatedFwMgmt " . $crFwMgmt . "; :global rawadIdFwMgmt \"" . $idFwMgmt . "\";\n" . \
       ":global rawadCreatedV6Fwd " . $crV6Fwd . "; :global rawadIdV6Fwd \"" . $idV6Fwd . "\";\n" . \
-      ":global rawadCreatedV6In " . $crV6In . "; :global rawadIdV6In \"" . $idV6In . "\";")
+      ":global rawadCreatedV6In " . $crV6In . "; :global rawadIdV6In \"" . $idV6In . "\";\n" . \
+      ":global rawadCreatedSched " . $crSched . "; :global rawadIdSched \"" . $idSched . "\";")
 
     :local stateBodyLen [:len $stateBody]
     :local ascii " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\n\r\t"

@@ -22,16 +22,28 @@ Deno.serve(async (req) => {
   }
 
   const url = new URL(req.url);
+  const action = (url.searchParams.get('action') ?? '').trim();
+
+  const db = createClient(supabaseUrl, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  if (action === 'revoked') {
+    const { data, error } = await db.rpc('get_revoked_sessions', { p_lookback_seconds: 300 });
+    if (error) return text('ERR:db_error', 500);
+    const rows = Array.isArray(data) ? data : [];
+    const lines = rows
+      .filter((r) => r?.mac_address && r?.ip_address)
+      .map((r) => `${r.mac_address}|${r.ip_address}`);
+    return text(lines.join('\n'), 200);
+  }
+
   const mac = (url.searchParams.get('mac') ?? '').trim().toUpperCase();
   const ip = (url.searchParams.get('ip') ?? '').trim();
 
   if (!/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(mac)) {
     return text('DENY:invalid_mac', 400);
   }
-
-  const db = createClient(supabaseUrl, serviceKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
 
   const { data, error } = await db.rpc('verify_mac_authorization', {
     p_mac: mac,

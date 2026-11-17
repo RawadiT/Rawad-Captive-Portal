@@ -82,6 +82,7 @@
 :global rawadCreatedFwMgmt; :global rawadIdFwMgmt
 :global rawadCreatedV6Fwd; :global rawadIdV6Fwd
 :global rawadCreatedV6In; :global rawadIdV6In
+:global rawadCreatedSched; :global rawadIdSched
 
 # 1. Remove firewall rules & verified address-list entries
 /ip firewall address-list remove [find where list="rawad-verified" && comment="rawad-guest-portal"]
@@ -95,6 +96,7 @@
 :if ($rawadCreatedV6Fwd = true && $rawadIdV6Fwd != "") do={ :do { /ipv6 firewall filter remove [find where .id=$rawadIdV6Fwd && comment="rawad-guest-portal: block ether10 ipv6 forward"] } on-error={} }
 :if ($rawadCreatedV6In = true && $rawadIdV6In != "") do={ :do { /ipv6 firewall filter remove [find where .id=$rawadIdV6In && comment="rawad-guest-portal: block ether10 ipv6 input"] } on-error={} }
 :if ($rawadCreatedNat = true && $rawadIdNat != "") do={ :do { /ip firewall nat remove [find where .id=$rawadIdNat && comment="rawad-guest-portal-nat"] } on-error={} }
+:if ($rawadCreatedSched = true && $rawadIdSched != "") do={ :do { /system scheduler remove [find where .id=$rawadIdSched && name="rawad-sync-revocations" && comment="rawad-guest-portal"] } on-error={} }
 
 # 2. Remove HotSpot resources (dependency-safe)
 :if ($rawadCreatedHsSrv = true && $rawadIdHsSrv != "") do={ :do { /ip hotspot remove [find where .id=$rawadIdHsSrv && name="rawad-guest-hotspot"] } on-error={} }

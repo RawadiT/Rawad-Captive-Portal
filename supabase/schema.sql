@@ -30,19 +30,37 @@ CREATE TABLE IF NOT EXISTS public.users (
 CREATE INDEX IF NOT EXISTS idx_users_username ON public.users (username);
 
 -- 3. Daily 30-minute free quota per MAC (1 per calendar day in Asia/Baghdad)
-DROP TABLE IF EXISTS public.free_quotas CASCADE;
-CREATE TABLE public.free_quotas (
+CREATE TABLE IF NOT EXISTS public.free_quotas (
   mac_address TEXT NOT NULL CHECK (mac_address ~ '^([0-9A-F]{2}:){5}[0-9A-F]{2}$'),
-  quota_date DATE NOT NULL,
+  quota_date DATE NOT NULL DEFAULT ((now() AT TIME ZONE 'Asia/Baghdad')::date),
   started_at TIMESTAMPTZ NOT NULL,
   expires_at TIMESTAMPTZ NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT free_quotas_pkey PRIMARY KEY (mac_address, quota_date)
 );
 
+-- Safe idempotent migration from legacy free_quotas (mac_address PK -> (mac_address, quota_date) PK)
+ALTER TABLE public.free_quotas ADD COLUMN IF NOT EXISTS quota_date DATE;
+UPDATE public.free_quotas
+SET quota_date = (started_at AT TIME ZONE 'Asia/Baghdad')::date
+WHERE quota_date IS NULL;
+ALTER TABLE public.free_quotas ALTER COLUMN quota_date SET NOT NULL;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.free_quotas'::regclass
+      AND conname = 'free_quotas_pkey'
+      AND pg_get_constraintdef(oid) NOT LIKE '%quota_date%'
+  ) THEN
+    ALTER TABLE public.free_quotas DROP CONSTRAINT free_quotas_pkey;
+    ALTER TABLE public.free_quotas ADD CONSTRAINT free_quotas_pkey PRIMARY KEY (mac_address, quota_date);
+  END IF;
+END $$;
+
 -- 4. Authorized / Active / Historical sessions
-DROP TABLE IF EXISTS public.sessions CASCADE;
-CREATE TABLE public.sessions (
+CREATE TABLE IF NOT EXISTS public.sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   session_type TEXT NOT NULL CHECK (session_type IN ('free', 'user')),
   user_id UUID NULL REFERENCES public.users(id) ON DELETE SET NULL,
@@ -54,12 +72,32 @@ CREATE TABLE public.sessions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_sessions_mac_status ON public.sessions (mac_address, status);
-CREATE INDEX idx_sessions_user_status ON public.sessions (user_id, status);
-CREATE INDEX idx_sessions_expires_at ON public.sessions (expires_at);
+-- Safe idempotent migration for legacy sessions rows/constraints
+UPDATE public.sessions
+SET status = 'disconnected'
+WHERE status NOT IN ('authorized', 'active', 'expired', 'disconnected');
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.sessions'::regclass AND conname = 'sessions_status_check'
+  ) THEN
+    ALTER TABLE public.sessions DROP CONSTRAINT sessions_status_check;
+  END IF;
+  ALTER TABLE public.sessions
+    ADD CONSTRAINT sessions_status_check
+    CHECK (status IN ('authorized', 'active', 'expired', 'disconnected'));
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_sessions_mac_status ON public.sessions (mac_address, status);
+CREATE INDEX IF NOT EXISTS idx_sessions_user_status ON public.sessions (user_id, status);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON public.sessions (expires_at);
 
 -- Prevent duplicate concurrent authorized/active sessions for the same MAC
-CREATE UNIQUE INDEX idx_sessions_one_active_mac
+DROP INDEX IF EXISTS public.idx_sessions_one_active_free_mac;
+DROP INDEX IF EXISTS public.idx_sessions_one_active_user;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_one_active_mac
   ON public.sessions (mac_address)
   WHERE status IN ('authorized', 'active');
 
@@ -314,6 +352,43 @@ BEGIN
 END;
 $$;
 
+-- 5. Return recently disabled/expired sessions whose router access should be revoked
+CREATE OR REPLACE FUNCTION public.get_revoked_sessions(
+  p_lookback_seconds INTEGER DEFAULT 300
+)
+RETURNS TABLE (
+  mac_address TEXT,
+  ip_address TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_now TIMESTAMPTZ := clock_timestamp();
+BEGIN
+  -- Mark any expired active/authorized sessions as expired
+  UPDATE public.sessions s
+  SET status = 'expired'
+  WHERE s.status IN ('authorized', 'active')
+    AND s.expires_at <= v_now;
+
+  -- Mark any active/authorized sessions of disabled users as disconnected
+  UPDATE public.sessions s
+  SET status = 'disconnected'
+  FROM public.users u
+  WHERE s.user_id = u.id
+    AND u.is_disabled = true
+    AND s.status IN ('authorized', 'active');
+
+  RETURN QUERY
+  SELECT DISTINCT s.mac_address, s.ip_address
+  FROM public.sessions s
+  WHERE s.status IN ('expired', 'disconnected')
+    AND s.created_at >= v_now - make_interval(secs => GREATEST(60, p_lookback_seconds));
+END;
+$$;
+
 REVOKE ALL ON FUNCTION public.request_free_quota(TEXT, TEXT, INTEGER, TIMESTAMPTZ) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.request_free_quota(TEXT, TEXT, INTEGER, TIMESTAMPTZ) TO service_role;
 
@@ -325,3 +400,6 @@ GRANT EXECUTE ON FUNCTION public.verify_mac_authorization(TEXT, TEXT, TIMESTAMPT
 
 REVOKE ALL ON FUNCTION public.disconnect_mac_session(TEXT) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.disconnect_mac_session(TEXT) TO service_role;
+
+REVOKE ALL ON FUNCTION public.get_revoked_sessions(INTEGER) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.get_revoked_sessions(INTEGER) TO service_role;

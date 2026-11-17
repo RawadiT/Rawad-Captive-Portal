@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
         p_ip: ip,
         p_duration_seconds: 1800,
       });
-      if (error) return json({ ok: false, error: error.message }, 400);
+      if (error) return json({ ok: false, error: 'تعذر معالجة طلب الحصة المجانية' }, 400);
       const row = Array.isArray(data) ? data[0] : data;
       if (!row?.allowed || row.remaining_seconds <= 0) {
         return json({
@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
         p_mac: mac,
         p_ip: ip,
       });
-      if (error) return json({ ok: false, error: error.message }, 400);
+      if (error) return json({ ok: false, error: 'تعذر معالجة طلب الحصة المجانية' }, 400);
       const row = Array.isArray(data) ? data[0] : data;
       if (!row?.allowed || row.remaining_seconds <= 0) {
         return json({ ok: false, error: 'انتهت صلاحية هذا الحساب أو تم تعطيله' }, 403);

@@ -57,21 +57,29 @@ const verifyMacTs = fs.readFileSync(path.join(root, 'supabase/functions/verify-m
 assert.match(verifyMacTs, /x-router-secret/);
 assert.match(verifyMacTs, /constantTimeEqual/);
 assert.match(verifyMacTs, /ALLOW:/);
+assert.match(verifyMacTs, /get_revoked_sessions/);
 
-// RouterOS deploy.rsc enforces ether10 scope, DNS gate, Walled Garden to Supabase, and Fail-Closed on-login
+const portalAuthTs = fs.readFileSync(path.join(root, 'supabase/functions/portal-auth/index.ts'), 'utf8');
+assert.ok(!/error\.message/.test(portalAuthTs), 'portal-auth must not leak raw DB error.message to client');
+
+// RouterOS deploy.rsc enforces ether10 scope, DNS gate, Walled Garden to Supabase, Fail-Closed on-login, and revocation scheduler
 assert.match(deployRsc, /:local guestIf "ether10"/);
 assert.match(deployRsc, /src-address-list="!rawad-verified" action=drop/);
 assert.match(deployRsc, /\/functions\/v1\/verify-mac\?mac=/);
+assert.match(deployRsc, /rawad-sync-revocations/);
 assert.match(deployRsc, /x-router-secret:/);
 assert.match(rollbackRsc, /\/system script remove \$stateSid/);
 assert.match(rollbackRsc, /\/system script remove \$anchorSid/);
+assert.match(rollbackRsc, /\$rawadCreatedSched = true/);
 
-// SQL schema checks: Asia/Baghdad daily quota + RLS + service_role-only grants
+// SQL schema checks: NO destructive DROP TABLE CASCADE, Asia/Baghdad daily quota, RLS, service_role-only grants
+assert.ok(!/DROP TABLE\b/i.test(schemaSql), 'schema.sql must NOT drop tables on re-apply');
 assert.match(schemaSql, /AT TIME ZONE 'Asia\/Baghdad'/i);
 assert.match(schemaSql, /PRIMARY KEY \(mac_address, quota_date\)/i);
 assert.match(schemaSql, /ALTER TABLE public\.free_quotas ENABLE ROW LEVEL SECURITY/i);
 assert.match(schemaSql, /GRANT EXECUTE ON FUNCTION public\.request_free_quota\(TEXT, TEXT, INTEGER, TIMESTAMPTZ\) TO service_role/i);
 assert.match(schemaSql, /GRANT EXECUTE ON FUNCTION public\.verify_mac_authorization\(TEXT, TEXT, TIMESTAMPTZ\) TO service_role/i);
+assert.match(schemaSql, /GRANT EXECUTE ON FUNCTION public\.get_revoked_sessions\(INTEGER\) TO service_role/i);
 
 // ============================================================================
 // 2. POSTGRESQL 16 REAL SQL & BEHAVIORAL VERIFICATION (via TEST_DATABASE_URL or local Docker PG)
@@ -141,14 +149,39 @@ if (pgExec) {
     const u3 = pgExec(`SELECT allowed, remaining_seconds FROM public.authorize_user_login('${uid}', '${testMac2}', '192.168.20.12', '2026-11-17T13:01:00Z'::timestamptz);`);
     assert.equal(u3, 'f|0');
 
-    // Disabled user -> verify_mac_authorization fails closed
+    // Disabled user -> verify_mac_authorization fails closed AND get_revoked_sessions returns MAC|IP for router cleanup
     pgExec(`UPDATE public.users SET is_disabled = true, expires_at = '2026-11-18T00:00:00Z'::timestamptz WHERE id = '${uid}';`);
+    pgExec(`SELECT public.authorize_user_login('${uid}', '${testMac2}', '192.168.20.12', '2026-11-17T11:30:00Z'::timestamptz);`);
     const vDisabled = pgExec(`SELECT allowed, remaining_seconds FROM public.verify_mac_authorization('${testMac2}', '192.168.20.12', '2026-11-17T11:30:00Z'::timestamptz);`);
     assert.equal(vDisabled, 'f|0');
+
+    // Also test an active session whose user is disabled mid-session -> get_revoked_sessions picks it up
+    pgExec(`UPDATE public.users SET is_disabled = false WHERE id = '${uid}';`);
+    pgExec(`SELECT public.authorize_user_login('${uid}', '${testMac2}', '192.168.20.12', '2026-11-17T11:30:00Z'::timestamptz);`);
+    pgExec(`SELECT public.verify_mac_authorization('${testMac2}', '192.168.20.12', '2026-11-17T11:30:00Z'::timestamptz);`);
+    pgExec(`UPDATE public.users SET is_disabled = true WHERE id = '${uid}';`);
+    const revokedList = pgExec(`SELECT mac_address || '|' || ip_address FROM public.get_revoked_sessions(300);`);
+    assert.ok(revokedList.includes(`${testMac2}|192.168.20.12`), 'Disabled active user must appear in get_revoked_sessions');
 
     // Unknown MAC without prior portal-auth -> verify_mac_authorization denies (prevents rawad-gate bypass!)
     const vUnknown = pgExec(`SELECT allowed, remaining_seconds FROM public.verify_mac_authorization('02:FF:FF:FF:FF:FF', '192.168.20.99', '2026-11-17T11:30:00Z'::timestamptz);`);
     assert.equal(vUnknown, 'f|0');
+
+    // Idempotent re-apply of schema.sql MUST preserve existing users, free_quotas, and sessions!
+    const usersBefore = Number(pgExec(`SELECT COUNT(*) FROM public.users WHERE id = '${uid}';`));
+    const quotasBefore = Number(pgExec(`SELECT COUNT(*) FROM public.free_quotas WHERE mac_address = '${macSameDay}';`));
+    assert.equal(usersBefore, 1);
+    assert.ok(quotasBefore >= 1);
+
+    pgExec(schemaSql);
+
+    const usersAfter = Number(pgExec(`SELECT COUNT(*) FROM public.users WHERE id = '${uid}';`));
+    const quotasAfter = Number(pgExec(`SELECT COUNT(*) FROM public.free_quotas WHERE mac_address = '${macSameDay}';`));
+    assert.equal(usersAfter, 1, 'Re-applying schema.sql must preserve existing users');
+    assert.equal(quotasAfter, quotasBefore, 'Re-applying schema.sql must preserve existing free_quotas');
+
+    const stillExhausted = pgExec(`SELECT allowed, remaining_seconds FROM public.request_free_quota('${macSameDay}', '192.168.20.11', 1800, '2026-11-17T18:35:00Z'::timestamptz);`);
+    assert.equal(stillExhausted, 'f|0', 'Consumed free quota must remain exhausted after schema.sql re-apply');
 
     console.log('POSTGRESQL 16 SCHEMA & EDGE-FUNCTION RPC TESTS PASSED');
   } finally {
