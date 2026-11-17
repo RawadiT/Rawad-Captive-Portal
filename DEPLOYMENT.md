@@ -41,11 +41,11 @@
    docker compose up -d --build
    docker compose ps   # تحقق من حالة (healthy) لـ backend وfrontend
    ```
-4. **التحقق من صحة Backend وSupabase:**
+4. **التحقق من صحة Backend وSupabase (مربوط بـ `127.0.0.1:4000` محلياً فقط):**
    ```bash
    curl http://127.0.0.1:4000/api/health
    ```
-   الاستجابة المتوقعة: `{"ok":true,"database":"supabase-https",...}`.
+   الاستجابة المتوقعة: `{"ok":true,"database":"supabase-https",...}`. (ملاحظة: المنفذ `4000` مقيد بـ `127.0.0.1` فقط في Docker ولا يُنشر خارجياً).
 
 ---
 

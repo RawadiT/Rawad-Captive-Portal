@@ -6,19 +6,32 @@ import type {
   UserRecord,
 } from '../types/index.js';
 
-export interface CommitFreeSessionResult {
+export interface BeginFreeProvisioningResult {
+  allowed: boolean;
+  conflict_active: boolean;
+  session_id: string | null;
+  remaining_seconds: number;
+}
+
+export interface FinalizeFreeSessionResult {
   allowed: boolean;
   is_new: boolean;
-  session_id: string | null;
+  session_id: string;
   mac_address: string;
   started_at: string;
   expires_at: string;
   remaining_seconds: number;
 }
 
-export interface CommitUserSessionResult {
+export interface BeginUserProvisioningResult {
   allowed: boolean;
   session_id: string | null;
+  remaining_seconds: number;
+}
+
+export interface FinalizeUserSessionResult {
+  allowed: boolean;
+  session_id: string;
   started_at: string | null;
   expires_at: string | null;
   remaining_seconds: number;
@@ -39,26 +52,32 @@ export interface DatabaseClient {
   createUser(input: { username: string; password_hash: string; duration_minutes: number }): Promise<UserRecord>;
   setUserDisabled(id: string, isDisabled: boolean): Promise<UserRecord | null>;
 
-  // Free Quotas (One-time 30 minutes per MAC, never deleted)
+  // Free Quotas
   listFreeQuotas(): Promise<FreeQuotaRecord[]>;
   getFreeQuota(macAddress: string): Promise<FreeQuotaRecord | null>;
 
-  // Atomic PostgreSQL RPCs (with pg_advisory_xact_lock)
-  commitFreeSession(input: {
+  // 3-Step PostgreSQL-Locked Provisioning RPCs
+  beginFreeProvisioning(input: {
     macAddress: string;
     ipAddress: string;
     hotspotUsername: string;
     hotspotProfile: string;
     durationSeconds: number;
-  }): Promise<CommitFreeSessionResult>;
+  }): Promise<BeginFreeProvisioningResult>;
 
-  commitUserSession(input: {
+  finalizeFreeSession(sessionId: string, durationSeconds: number): Promise<FinalizeFreeSessionResult>;
+
+  beginUserProvisioning(input: {
     userId: string;
     macAddress: string;
     ipAddress: string;
     hotspotUsername: string;
     hotspotProfile: string;
-  }): Promise<CommitUserSessionResult>;
+  }): Promise<BeginUserProvisioningResult>;
+
+  finalizeUserSession(sessionId: string): Promise<FinalizeUserSessionResult>;
+
+  abortProvisioning(sessionId: string): Promise<void>;
 
   // Sessions
   getActiveSessionByMac(macAddress: string): Promise<SessionRecord | null>;

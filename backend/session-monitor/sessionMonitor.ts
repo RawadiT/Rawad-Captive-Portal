@@ -17,9 +17,13 @@ export class SessionMonitor {
 
   start(intervalMs = 5000): void {
     if (this.timer) return;
-    void this.syncSessions().catch(() => {});
+    void this.syncSessions().catch((err) => {
+      console.error('[SessionMonitor] initial sync failed:', err instanceof Error ? err.message : err);
+    });
     this.timer = setInterval(() => {
-      void this.syncSessions().catch(() => {});
+      void this.syncSessions().catch((err) => {
+        console.error('[SessionMonitor] periodic sync failed:', err instanceof Error ? err.message : err);
+      });
     }, intervalMs);
     this.timer.unref();
   }
@@ -65,13 +69,18 @@ export class SessionMonitor {
       if (isExpired) {
         await this.db.updateSessionStatus(s.id, 'expired');
         expiredCount++;
-        await this.mikrotik
-          .revokeHotspotAccess({
+        try {
+          await this.mikrotik.revokeHotspotAccess({
             username: s.hotspot_username,
             macAddress: s.mac_address,
             profile: s.hotspot_profile,
-          })
-          .catch(() => {});
+          });
+        } catch (err) {
+          console.error(
+            `[SessionMonitor] Failed to revoke expired session '${s.hotspot_username}':`,
+            err instanceof Error ? err.message : err
+          );
+        }
       } else if (missingOnRouter) {
         await this.db.updateSessionStatus(s.id, 'disconnected');
         disconnectedCount++;
@@ -85,10 +94,15 @@ export class SessionMonitor {
         if (!m.user.startsWith('free-') && !m.user.startsWith('usr-')) continue;
         const key = `${m.user}|${m.macAddress.toUpperCase()}`;
         if (!validActiveKeys.has(key)) {
-          await this.mikrotik
-            .revokeHotspotAccess({ username: m.user, macAddress: m.macAddress })
-            .catch(() => {});
-          orphansRevoked++;
+          try {
+            await this.mikrotik.revokeHotspotAccess({ username: m.user, macAddress: m.macAddress });
+            orphansRevoked++;
+          } catch (err) {
+            console.error(
+              `[SessionMonitor] Failed to revoke orphan session '${m.user}':`,
+              err instanceof Error ? err.message : err
+            );
+          }
         }
       }
     }
@@ -101,13 +115,12 @@ export class SessionMonitor {
     const active = await this.db.getActiveSessionByMac(mac);
     if (!active) return;
 
-    await this.mikrotik
-      .revokeHotspotAccess({
-        username: active.hotspot_username,
-        macAddress: active.mac_address,
-        profile: active.hotspot_profile,
-      })
-      .catch(() => {});
+    // Do NOT mark session disconnected in PostgreSQL if RouterOS revocation fails
+    await this.mikrotik.revokeHotspotAccess({
+      username: active.hotspot_username,
+      macAddress: active.mac_address,
+      profile: active.hotspot_profile,
+    });
     await this.db.updateSessionStatus(active.id, 'disconnected');
   }
 }

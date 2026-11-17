@@ -8,14 +8,23 @@
 :local guestIf "ether10"
 :local guestGw "192.168.20.1"
 :local guestNet "192.168.20.0/24"
-# IP of the Portal/Backend host server reachable from RouterOS:
 :local backendServerIp "192.168.10.10"
-# MUST be a real company-owned domain with a publicly-trusted TLS cert:
 :local portalDomain "wifi.YOUR_COMPANY_DOMAIN.com"
 :local mikrotikCertName "rawad-mikrotik-cert"
 :local apiPassword "CHANGE_THIS_STRONG_API_PASSWORD"
 
-:put "=== [1/10] Pre-flight Security & Conflict Gate ==="
+:local cPriv3 "rawad-guest-portal: drop ether10 to 172.16.0.0/12"
+:local cPriv2 "rawad-guest-portal: drop ether10 to 10.0.0.0/8"
+:local cPriv1 "rawad-guest-portal: drop ether10 to 192.168.0.0/16"
+:local cPortal "rawad-guest-portal: allow ether10 to portal https"
+:local cAdm "rawad-guest-portal: drop ether10 to admin and direct backend"
+:local cDnsTcp "rawad-guest-portal: drop ether10 external TCP DNS"
+:local cDnsUdp "rawad-guest-portal: drop ether10 external UDP DNS"
+:local cMgmt "rawad-guest-portal: drop ether10 to router mgmt"
+:local cV6Fwd "rawad-guest-portal: block ether10 ipv6 forward"
+:local cV6In "rawad-guest-portal: block ether10 ipv6 input"
+
+:put "=== [1/10] Pre-flight Security & Ownership Conflict Gate ==="
 :if ($apiPassword = "" || $apiPassword = "CHANGE_THIS_STRONG_API_PASSWORD" || $apiPassword = "REPLACE_WITH_API_PASSWORD" || [:len $apiPassword] < 12) do={
     :error "ABORT: Set a strong apiPassword (>= 12 chars, not default) before deploying."
 }
@@ -32,7 +41,14 @@
     :error ("ABORT: Certificate '" . $mikrotikCertName . "' not found. Import MikroTik TLS cert first.")
 }
 
-:put "=== [2/10] Recording Full Ownership & Previous State Snapshot ==="
+# Never claim ownership of pre-existing non-project resources on initial deploy
+:if ([:len [/system script find where name="rawad-portal-state"]] = 0) do={
+    :if ([:len [/ip pool find where name="rawad-guest-pool"]] > 0 || [:len [/ip dhcp-server find where name="rawad-guest-dhcp"]] > 0 || [:len [/ip dhcp-server option find where name="rawad-capport-114"]] > 0 || [:len [/ip hotspot profile find where name="rawad-hs-prof"]] > 0 || [:len [/ip hotspot find where name="rawad-guest-hotspot"]] > 0 || [:len [/user find where name="rawad-api"]] > 0 || [:len [/user group find where name="rawad-api-group"]] > 0) do={
+        :error "ABORT: Pre-existing rawad-* resource found without rawad-portal-state. Resolve manually before deploying."
+    }
+}
+
+:put "=== [2/10] Recording Full Individual Ownership & Previous State Snapshot ==="
 :if ([:len [/system script find where name="rawad-portal-state"]] = 0) do={
     :local prevDns [/ip dns get allow-remote-requests]
     :local prevWwwSslDis [/ip service get www-ssl disabled]
@@ -54,6 +70,17 @@
     :local crApiGrp ([:len [/user group find where name="rawad-api-group"]] = 0)
     :local crApiUsr ([:len [/user find where name="rawad-api"]] = 0)
 
+    :local crFwPriv3 ([:len [/ip firewall filter find where comment=$cPriv3]] = 0)
+    :local crFwPriv2 ([:len [/ip firewall filter find where comment=$cPriv2]] = 0)
+    :local crFwPriv1 ([:len [/ip firewall filter find where comment=$cPriv1]] = 0)
+    :local crFwPortal ([:len [/ip firewall filter find where comment=$cPortal]] = 0)
+    :local crFwAdm ([:len [/ip firewall filter find where comment=$cAdm]] = 0)
+    :local crFwDnsTcp ([:len [/ip firewall filter find where comment=$cDnsTcp]] = 0)
+    :local crFwDnsUdp ([:len [/ip firewall filter find where comment=$cDnsUdp]] = 0)
+    :local crFwMgmt ([:len [/ip firewall filter find where comment=$cMgmt]] = 0)
+    :local crV6Fwd ([:len [/ipv6 firewall filter find where comment=$cV6Fwd]] = 0)
+    :local crV6In ([:len [/ipv6 firewall filter find where comment=$cV6In]] = 0)
+
     :local stateSrc (":global rawadPrevDnsRemote " . $prevDns . ";\n" . \
       ":global rawadPrevWwwSslDis " . $prevWwwSslDis . ";\n" . \
       ":global rawadPrevWwwSslAddr \"" . $prevWwwSslAddr . "\";\n" . \
@@ -71,7 +98,17 @@
       ":global rawadCreatedWg " . $crWg . ";\n" . \
       ":global rawadCreatedNat " . $crNat . ";\n" . \
       ":global rawadCreatedApiGroup " . $crApiGrp . ";\n" . \
-      ":global rawadCreatedApiUser " . $crApiUsr . ";")
+      ":global rawadCreatedApiUser " . $crApiUsr . ";\n" . \
+      ":global rawadCreatedFwPriv3 " . $crFwPriv3 . ";\n" . \
+      ":global rawadCreatedFwPriv2 " . $crFwPriv2 . ";\n" . \
+      ":global rawadCreatedFwPriv1 " . $crFwPriv1 . ";\n" . \
+      ":global rawadCreatedFwPortal " . $crFwPortal . ";\n" . \
+      ":global rawadCreatedFwAdm " . $crFwAdm . ";\n" . \
+      ":global rawadCreatedFwDnsTcp " . $crFwDnsTcp . ";\n" . \
+      ":global rawadCreatedFwDnsUdp " . $crFwDnsUdp . ";\n" . \
+      ":global rawadCreatedFwMgmt " . $crFwMgmt . ";\n" . \
+      ":global rawadCreatedV6Fwd " . $crV6Fwd . ";\n" . \
+      ":global rawadCreatedV6In " . $crV6In . ";")
 
     /system script add name="rawad-portal-state" source=$stateSrc comment="rawad-guest-portal-state"
 }
@@ -95,7 +132,7 @@
     /ip dhcp-server add name="rawad-guest-dhcp" interface=$guestIf address-pool="rawad-guest-pool" lease-time=1h disabled=no comment="rawad-guest-portal"
 }
 
-:put "=== [5/10] Enabling Split-Horizon DNS & NTP (UTC/Baghdad) ==="
+:put "=== [5/10] Enabling Split-Horizon DNS & NTP (Ensure WAN firewall blocks external DNS 53) ==="
 /ip dns set allow-remote-requests=yes
 :if ([:len [/ip dns static find where name=$portalDomain]] = 0) do={
     /ip dns static add name=$portalDomain address=$backendServerIp comment="rawad-guest-portal"
@@ -105,7 +142,6 @@
 
 :put "=== [6/10] Creating HotSpot Server Profile & Server on ether10 ==="
 :if ([:len [/ip hotspot profile find where name="rawad-hs-prof"]] = 0) do={
-    # Do NOT enable mac-cookie: ordinary accounts must not be bound to MAC and expired/disabled sessions must not auto-relogin
     /ip hotspot profile add name="rawad-hs-prof" hotspot-address=$guestGw html-directory="hotspot" login-by=http-chap,http-pap use-radius=no
 }
 :if ([:len [/ip hotspot find where name="rawad-guest-hotspot"]] = 0) do={
@@ -118,16 +154,6 @@
 }
 
 :put "=== [8/10] Idempotent & Deterministic Firewall Rules (Scoped strictly to ether10) ==="
-# Forward chain rules (reverse-inserted with place-before=0 for exact top-to-bottom order):
-#   1. Drop external UDP DNS (53) from ether10
-#   2. Drop external TCP DNS (53) from ether10
-#   3. Drop ether10 -> Admin Dashboard (8443) & Direct Backend (4000)
-#   4. ACCEPT ether10 -> Guest Portal HTTPS Proxy ONLY ($backendServerIp:443)
-#   5. Drop ether10 -> 192.168.0.0/16 (isolates from all private LANs without touching ether1-ether9)
-#   6. Drop ether10 -> 10.0.0.0/8
-#   7. Drop ether10 -> 172.16.0.0/12
-
-:local cPriv3 "rawad-guest-portal: drop ether10 to 172.16.0.0/12"
 :if ([:len [/ip firewall filter find where comment=$cPriv3]] = 0) do={
     :if ([:len [/ip firewall filter find]] > 0) do={
         /ip firewall filter add chain=forward in-interface=$guestIf dst-address=172.16.0.0/12 action=drop place-before=0 comment=$cPriv3
@@ -135,39 +161,28 @@
         /ip firewall filter add chain=forward in-interface=$guestIf dst-address=172.16.0.0/12 action=drop comment=$cPriv3
     }
 }
-:local cPriv2 "rawad-guest-portal: drop ether10 to 10.0.0.0/8"
 :if ([:len [/ip firewall filter find where comment=$cPriv2]] = 0) do={
     /ip firewall filter add chain=forward in-interface=$guestIf dst-address=10.0.0.0/8 action=drop place-before=0 comment=$cPriv2
 }
-:local cPriv1 "rawad-guest-portal: drop ether10 to 192.168.0.0/16"
 :if ([:len [/ip firewall filter find where comment=$cPriv1]] = 0) do={
     /ip firewall filter add chain=forward in-interface=$guestIf dst-address=192.168.0.0/16 action=drop place-before=0 comment=$cPriv1
 }
-:local cPortal "rawad-guest-portal: allow ether10 to portal https"
 :if ([:len [/ip firewall filter find where comment=$cPortal]] = 0) do={
     /ip firewall filter add chain=forward in-interface=$guestIf dst-address=$backendServerIp protocol=tcp dst-port=443 action=accept place-before=0 comment=$cPortal
 }
-:local cAdm "rawad-guest-portal: drop ether10 to admin and direct backend"
 :if ([:len [/ip firewall filter find where comment=$cAdm]] = 0) do={
     /ip firewall filter add chain=forward in-interface=$guestIf dst-address=$backendServerIp protocol=tcp dst-port=8443,4000 action=drop place-before=0 comment=$cAdm
 }
-:local cDnsTcp "rawad-guest-portal: drop ether10 external TCP DNS"
 :if ([:len [/ip firewall filter find where comment=$cDnsTcp]] = 0) do={
     /ip firewall filter add chain=forward in-interface=$guestIf protocol=tcp dst-port=53 action=drop place-before=0 comment=$cDnsTcp
 }
-:local cDnsUdp "rawad-guest-portal: drop ether10 external UDP DNS"
 :if ([:len [/ip firewall filter find where comment=$cDnsUdp]] = 0) do={
     /ip firewall filter add chain=forward in-interface=$guestIf protocol=udp dst-port=53 action=drop place-before=0 comment=$cDnsUdp
 }
-
-# Input chain: block ether10 from RouterOS management services
-:local cMgmt "rawad-guest-portal: drop ether10 to router mgmt"
 :if ([:len [/ip firewall filter find where comment=$cMgmt]] = 0) do={
     /ip firewall filter add chain=input in-interface=$guestIf protocol=tcp dst-port=22,23,80,443,8291,8728,8729 action=drop place-before=0 comment=$cMgmt
 }
 
-# IPv6 top-priority block on ether10
-:local cV6Fwd "rawad-guest-portal: block ether10 ipv6 forward"
 :if ([:len [/ipv6 firewall filter find where comment=$cV6Fwd]] = 0) do={
     :if ([:len [/ipv6 firewall filter find]] > 0) do={
         /ipv6 firewall filter add chain=forward in-interface=$guestIf action=drop place-before=0 comment=$cV6Fwd
@@ -175,7 +190,6 @@
         /ipv6 firewall filter add chain=forward in-interface=$guestIf action=drop comment=$cV6Fwd
     }
 }
-:local cV6In "rawad-guest-portal: block ether10 ipv6 input"
 :if ([:len [/ipv6 firewall filter find where comment=$cV6In]] = 0) do={
     /ipv6 firewall filter add chain=input in-interface=$guestIf action=drop place-before=0 comment=$cV6In
 }

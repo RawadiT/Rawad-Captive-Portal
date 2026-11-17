@@ -47,22 +47,27 @@ export class QuotaService {
     this.now = cfg.nowProvider ?? (() => new Date());
   }
 
-  private async revokeWithRetry(
+  private async revokeStrictWithRetry(
     username: string,
     macAddress: string,
     profile: string,
     attempts = 3
   ): Promise<void> {
+    let lastErr: unknown;
     for (let i = 0; i < attempts; i++) {
       try {
         await this.mikrotik.revokeHotspotAccess({ username, macAddress, profile });
         return;
-      } catch {
+      } catch (err) {
+        lastErr = err;
         if (i < attempts - 1) {
           await new Promise((r) => setTimeout(r, 150 * (i + 1)));
         }
       }
     }
+    const msg = lastErr instanceof Error ? lastErr.message : String(lastErr);
+    console.error(`[CRITICAL] Failed to revoke MikroTik session '${username}' (${macAddress}): ${msg}`);
+    throw new Error(`فشل إلغاء الجلسة على MikroTik: ${msg}`);
   }
 
   async getGuestStatus(macAddress: string): Promise<{
@@ -121,106 +126,94 @@ export class QuotaService {
   }
 
   /**
-   * 2-Phase Transaction & Failure-Recovery Flow (Free Quota):
-   *   Phase 1 (Read-only): Verify eligibility without consuming free_quotas.
-   *   Phase 2 (MikroTik):  Provision HotSpot user/profile with session-timeout FIRST.
-   *                        If MikroTik fails, free_quotas is NEVER consumed.
-   *   Phase 3 (DB Commit): Call PostgreSQL atomic RPC `commit_free_session` (pg_advisory_xact_lock).
-   *                        If DB commit fails or returns allowed=false, execute compensating revoke on MikroTik.
+   * 3-Step PostgreSQL-Locked Provisioning & Failure-Recovery (Free Quota):
+   *   1. DB `beginFreeProvisioning`: acquires pg_advisory_xact_lock & inserts 'provisioning' row
+   *      (protected by unique partial index) WITHOUT consuming `free_quotas` yet.
+   *   2. MikroTik `grantHotspotAccess(..., bindMac: true)`: provisions profile/user/active.
+   *      If MikroTik fails, `abortProvisioning` releases the lock and `free_quotas` is UNTOUCHED.
+   *   3. DB `finalizeFreeSession`: atomically writes `free_quotas` & flips session to 'active'.
+   *      If DB fails, executes strict compensating revoke on MikroTik + aborts provisioning.
    */
   async grantFreeAccess(input: {
     macAddress: string;
     ipAddress: string;
   }): Promise<{ session: SessionRecord; remainingSeconds: number; resumed: boolean }> {
     const mac = normalizeMac(input.macAddress);
-    const nowMs = this.now().getTime();
-
-    // Phase 1: Read-only eligibility check
-    const existingActive = await this.db.getActiveSessionByMac(mac);
-    if (existingActive) {
-      const activeOnRouter = await this.mikrotik.listActiveSessions().catch(() => []);
-      const stillOnRouter = activeOnRouter.some(
-        (s) => s.macAddress.toUpperCase() === mac && s.user === existingActive.hotspot_username
-      );
-      if (stillOnRouter) {
-        throw new ConflictError('لديك جلسة مجانية نشطة حالياً، لا يمكن منح حصة ثانية.');
-      }
-    }
-
-    const existingQuota = await this.db.getFreeQuota(mac);
-    let targetTimeoutSeconds = this.cfg.freeQuotaSeconds;
-    if (existingQuota) {
-      targetTimeoutSeconds = Math.max(
-        0,
-        Math.floor((Date.parse(existingQuota.expires_at) - nowMs) / 1000)
-      );
-      if (targetTimeoutSeconds <= 0) {
-        throw new ForbiddenError('تم استهلاك الحصة المجانية (30 دقيقة) لهذا الجهاز مسبقاً.');
-      }
-    }
-
-    // Phase 2: Provision MikroTik BEFORE mutating free_quotas in PostgreSQL
     const cleanMac = mac.replace(/:/g, '').toLowerCase();
     const hotspotUsername = `free-${cleanMac}`;
     const hotspotProfile = `rawad-sess-free-${cleanMac}`;
     const hotspotPassword = crypto.randomBytes(12).toString('hex');
 
-    await this.mikrotik.grantHotspotAccess({
-      username: hotspotUsername,
-      password: hotspotPassword,
+    const begin = await this.db.beginFreeProvisioning({
       macAddress: mac,
       ipAddress: input.ipAddress,
-      sessionTimeoutSeconds: targetTimeoutSeconds,
-      profile: hotspotProfile,
+      hotspotUsername,
+      hotspotProfile,
+      durationSeconds: this.cfg.freeQuotaSeconds,
     });
 
-    // Phase 3: Atomic PostgreSQL commit under pg_advisory_xact_lock
+    if (begin.conflict_active) {
+      throw new ConflictError('لديك جلسة مجانية نشطة حالياً، لا يمكن منح حصة ثانية.');
+    }
+    if (!begin.allowed || !begin.session_id || begin.remaining_seconds <= 0) {
+      throw new ForbiddenError('تم استهلاك الحصة المجانية (30 دقيقة) لهذا الجهاز مسبقاً.');
+    }
+
     try {
-      const committed = await this.db.commitFreeSession({
+      await this.mikrotik.grantHotspotAccess({
+        username: hotspotUsername,
+        password: hotspotPassword,
         macAddress: mac,
         ipAddress: input.ipAddress,
-        hotspotUsername,
-        hotspotProfile,
-        durationSeconds: this.cfg.freeQuotaSeconds,
+        bindMac: true,
+        sessionTimeoutSeconds: begin.remaining_seconds,
+        profile: hotspotProfile,
       });
+    } catch (err) {
+      await this.db.abortProvisioning(begin.session_id).catch((e) =>
+        console.error('[Recovery] abortProvisioning failed:', e)
+      );
+      throw err;
+    }
 
-      if (!committed.allowed || !committed.session_id || committed.remaining_seconds <= 0) {
-        await this.revokeWithRetry(hotspotUsername, mac, hotspotProfile);
+    try {
+      const finalized = await this.db.finalizeFreeSession(begin.session_id, this.cfg.freeQuotaSeconds);
+      if (!finalized.allowed || finalized.remaining_seconds <= 0) {
+        await this.revokeStrictWithRetry(hotspotUsername, mac, hotspotProfile);
         throw new ForbiddenError('تم استهلاك الحصة المجانية (30 دقيقة) لهذا الجهاز مسبقاً.');
       }
 
       const session: SessionRecord = {
-        id: committed.session_id,
+        id: finalized.session_id,
         session_type: 'free',
         user_id: null,
-        mac_address: committed.mac_address,
+        mac_address: finalized.mac_address,
         ip_address: input.ipAddress,
         hotspot_username: hotspotUsername,
         hotspot_profile: hotspotProfile,
-        started_at: committed.started_at,
-        expires_at: committed.expires_at,
+        started_at: finalized.started_at,
+        expires_at: finalized.expires_at,
         status: 'active',
-        created_at: committed.started_at,
+        created_at: finalized.started_at,
       };
 
       return {
         session,
-        remainingSeconds: committed.remaining_seconds,
-        resumed: !committed.is_new,
+        remainingSeconds: finalized.remaining_seconds,
+        resumed: !finalized.is_new,
       };
     } catch (err) {
-      await this.revokeWithRetry(hotspotUsername, mac, hotspotProfile);
+      await this.revokeStrictWithRetry(hotspotUsername, mac, hotspotProfile).catch(() => {});
+      await this.db.abortProvisioning(begin.session_id).catch(() => {});
       throw err;
     }
   }
 
   /**
-   * 2-Phase Transaction & Failure-Recovery Flow (Paid Account):
-   *   Phase 1 (Read-only): Verify password, disabled status, and remaining seconds WITHOUT setting started_at.
-   *   Phase 2 (MikroTik):  Revoke prior device/user sessions & provision new HotSpot access FIRST.
-   *                        If MikroTik fails, account's started_at / expires_at is NOT started.
-   *   Phase 3 (DB Commit): Call PostgreSQL atomic RPC `commit_user_session` (pg_advisory_xact_lock).
-   *                        If DB commit fails, execute compensating revoke on MikroTik.
+   * 3-Step PostgreSQL-Locked Provisioning & Failure-Recovery (Ordinary Account):
+   *   - Ordinary accounts NEVER store a MAC restriction (`bindMac: false`).
+   *   - Prior active sessions are only marked 'disconnected' AFTER RouterOS revocation succeeds.
+   *   - `started_at` / `expires_at` are ONLY written in `finalizeUserSession` AFTER MikroTik succeeds.
    */
   async loginUser(input: {
     username: string;
@@ -230,9 +223,7 @@ export class QuotaService {
   }): Promise<{ session: SessionRecord; user: PublicUser; remainingSeconds: number }> {
     const cleanUsername = input.username.trim();
     const mac = normalizeMac(input.macAddress);
-    const nowMs = this.now().getTime();
 
-    // Phase 1: Read-only auth & remaining time check
     const user = await this.db.getUserByUsername(cleanUsername);
     if (!user || !verifyPassword(input.password, user.password_hash)) {
       throw new UnauthorizedError('اسم المستخدم أو كلمة المرور غير صحيحة');
@@ -241,15 +232,7 @@ export class QuotaService {
       throw new ForbiddenError('هذا الحساب معطل حالياً');
     }
 
-    const remainingSeconds = user.expires_at
-      ? Math.max(0, Math.floor((Date.parse(user.expires_at) - nowMs) / 1000))
-      : user.duration_minutes * 60;
-
-    if (remainingSeconds <= 0) {
-      throw new ForbiddenError('انتهت صلاحية هذا الحساب');
-    }
-
-    // Revoke any previous active session for this MAC or user on MikroTik
+    // Revoke any existing active sessions for this user or connecting MAC; abort if RouterOS revoke fails
     const activeByMac = await this.db.getActiveSessionByMac(mac);
     const activeByUser = await this.db.listActiveSessionsByUserId(user.id);
     const toClose = new Map<string, SessionRecord>();
@@ -257,72 +240,78 @@ export class QuotaService {
     for (const s of activeByUser) toClose.set(s.id, s);
 
     for (const old of toClose.values()) {
-      await this.mikrotik
-        .revokeHotspotAccess({
-          username: old.hotspot_username,
-          macAddress: old.mac_address,
-          profile: old.hotspot_profile,
-        })
-        .catch(() => {});
+      await this.revokeStrictWithRetry(old.hotspot_username, old.mac_address, old.hotspot_profile);
       await this.db.updateSessionStatus(old.id, 'disconnected');
     }
 
-    // Phase 2: Provision MikroTik BEFORE starting account's started_at/expires_at
     const hotspotUsername = `usr-${user.username}`;
     const hotspotProfile = `rawad-sess-usr-${user.id.slice(0, 8)}`;
     const hotspotPassword = crypto.randomBytes(12).toString('hex');
 
-    await this.mikrotik.grantHotspotAccess({
-      username: hotspotUsername,
-      password: hotspotPassword,
+    const begin = await this.db.beginUserProvisioning({
+      userId: user.id,
       macAddress: mac,
       ipAddress: input.ipAddress,
-      sessionTimeoutSeconds: remainingSeconds,
-      profile: hotspotProfile,
+      hotspotUsername,
+      hotspotProfile,
     });
 
-    // Phase 3: Atomic PostgreSQL commit under pg_advisory_xact_lock
+    if (!begin.allowed || !begin.session_id || begin.remaining_seconds <= 0) {
+      throw new ForbiddenError('انتهت صلاحية هذا الحساب أو تم تعطيله');
+    }
+
     try {
-      const committed = await this.db.commitUserSession({
-        userId: user.id,
+      await this.mikrotik.grantHotspotAccess({
+        username: hotspotUsername,
+        password: hotspotPassword,
         macAddress: mac,
         ipAddress: input.ipAddress,
-        hotspotUsername,
-        hotspotProfile,
+        bindMac: false, // Ordinary accounts must NOT store a MAC restriction
+        sessionTimeoutSeconds: begin.remaining_seconds,
+        profile: hotspotProfile,
       });
+    } catch (err) {
+      await this.db.abortProvisioning(begin.session_id).catch((e) =>
+        console.error('[Recovery] abortProvisioning failed:', e)
+      );
+      throw err;
+    }
 
-      if (!committed.allowed || !committed.session_id || !committed.started_at || !committed.expires_at || committed.remaining_seconds <= 0) {
-        await this.revokeWithRetry(hotspotUsername, mac, hotspotProfile);
+    try {
+      const finalized = await this.db.finalizeUserSession(begin.session_id);
+      if (!finalized.allowed || !finalized.started_at || !finalized.expires_at || finalized.remaining_seconds <= 0) {
+        await this.revokeStrictWithRetry(hotspotUsername, mac, hotspotProfile);
         throw new ForbiddenError('انتهت صلاحية هذا الحساب أو تم تعطيله');
       }
 
       const session: SessionRecord = {
-        id: committed.session_id,
+        id: finalized.session_id,
         session_type: 'user',
         user_id: user.id,
         mac_address: mac,
         ip_address: input.ipAddress,
         hotspot_username: hotspotUsername,
         hotspot_profile: hotspotProfile,
-        started_at: committed.started_at,
-        expires_at: committed.expires_at,
+        started_at: finalized.started_at,
+        expires_at: finalized.expires_at,
         status: 'active',
-        created_at: committed.started_at,
+        created_at: finalized.started_at,
       };
 
       const updatedUser: UserRecord = {
         ...user,
-        started_at: committed.started_at,
-        expires_at: committed.expires_at,
+        started_at: finalized.started_at,
+        expires_at: finalized.expires_at,
       };
 
       return {
         session,
         user: toPublicUser(updatedUser, this.now().getTime()),
-        remainingSeconds: committed.remaining_seconds,
+        remainingSeconds: finalized.remaining_seconds,
       };
     } catch (err) {
-      await this.revokeWithRetry(hotspotUsername, mac, hotspotProfile);
+      await this.revokeStrictWithRetry(hotspotUsername, mac, hotspotProfile).catch(() => {});
+      await this.db.abortProvisioning(begin.session_id).catch(() => {});
       throw err;
     }
   }
@@ -363,13 +352,7 @@ export class QuotaService {
     if (isDisabled) {
       const actives = await this.db.listActiveSessionsByUserId(userId);
       for (const s of actives) {
-        await this.mikrotik
-          .revokeHotspotAccess({
-            username: s.hotspot_username,
-            macAddress: s.mac_address,
-            profile: s.hotspot_profile,
-          })
-          .catch(() => {});
+        await this.revokeStrictWithRetry(s.hotspot_username, s.mac_address, s.hotspot_profile);
         await this.db.updateSessionStatus(s.id, 'disconnected');
       }
     }

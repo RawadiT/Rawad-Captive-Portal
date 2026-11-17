@@ -5,6 +5,7 @@ export interface GrantHotspotAccessInput {
   password: string;
   macAddress: string;
   ipAddress: string;
+  bindMac: boolean;
   sessionTimeoutSeconds: number;
   profile: string;
 }

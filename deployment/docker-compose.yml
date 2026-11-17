@@ -11,6 +11,9 @@ services:
       - NODE_ENV=production
       - HOST=0.0.0.0
       - TRUST_PROXY=true
+    ports:
+      # Strictly localhost-only binding for local health checks; never exposed publicly
+      - "127.0.0.1:4000:4000"
     volumes:
       - ./tls/certs:/app/certs:ro
     healthcheck:

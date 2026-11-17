@@ -164,16 +164,24 @@ export class RouterOSRestClient implements MikroTikAdapter {
   /**
    * Enforces per-session wall-clock expiration using a dedicated HotSpot User Profile
    * with `session-timeout` (NOT `limit-uptime`).
+   * - Cleans up partial resources on failure.
+   * - Never claims ownership of pre-existing non-project profiles/users.
+   * - Never stores a permanent MAC restriction on ordinary accounts (`bindMac=false`).
    */
   async grantHotspotAccess(input: GrantHotspotAccessInput): Promise<GrantHotspotAccessResult> {
     const timeoutStr = formatRouterOSDuration(input.sessionTimeoutSeconds);
+    let createdProfile = false;
+    let createdUserId: string | null = null;
 
-    // 1. Upsert dedicated per-session HotSpot User Profile with exact session-timeout
-    const existingProfiles = await this.request<Array<{ '.id': string }>>(
+    // 1. Verify or create project-owned HotSpot User Profile
+    const existingProfiles = await this.request<Array<{ '.id': string; comment?: string }>>(
       'GET',
       `/ip/hotspot/user/profile?name=${encodeURIComponent(input.profile)}`
     );
     if (existingProfiles.length > 0) {
+      if (existingProfiles[0].comment !== 'rawad-guest-portal-managed') {
+        throw new Error(`Conflict: HotSpot profile '${input.profile}' already exists and is not project-owned`);
+      }
       await this.request(
         'PATCH',
         `/ip/hotspot/user/profile/${encodeURIComponent(existingProfiles[0]['.id'])}`,
@@ -181,7 +189,6 @@ export class RouterOSRestClient implements MikroTikAdapter {
           'session-timeout': timeoutStr,
           'keepalive-timeout': '00:02:00',
           'shared-users': '1',
-          comment: 'rawad-guest-portal-managed',
         }
       );
     } else {
@@ -192,38 +199,67 @@ export class RouterOSRestClient implements MikroTikAdapter {
         'shared-users': '1',
         comment: 'rawad-guest-portal-managed',
       });
+      createdProfile = true;
     }
 
-    // 2. Replace any previous HotSpot user with same username
-    const existingUsers = await this.request<Array<{ '.id': string }>>(
-      'GET',
-      `/ip/hotspot/user?name=${encodeURIComponent(input.username)}`
-    );
-    for (const u of existingUsers) {
-      await this.request('DELETE', `/ip/hotspot/user/${encodeURIComponent(u['.id'])}`);
+    try {
+      // 2. Verify no pre-existing non-project HotSpot user conflict, replace only project-owned user
+      const existingUsers = await this.request<Array<{ '.id': string; comment?: string }>>(
+        'GET',
+        `/ip/hotspot/user?name=${encodeURIComponent(input.username)}`
+      );
+      for (const u of existingUsers) {
+        if (u.comment !== 'rawad-guest-portal-managed') {
+          throw new Error(`Conflict: HotSpot user '${input.username}' already exists and is not project-owned`);
+        }
+        await this.request('DELETE', `/ip/hotspot/user/${encodeURIComponent(u['.id'])}`);
+      }
+
+      const userPayload: Record<string, string> = {
+        name: input.username,
+        password: input.password,
+        profile: input.profile,
+        server: this.cfg.hotspotServer,
+        comment: 'rawad-guest-portal-managed',
+      };
+      // Free quota remains associated with MAC; ordinary accounts must NOT store a MAC restriction
+      if (input.bindMac) {
+        userPayload['mac-address'] = input.macAddress.toUpperCase();
+      }
+
+      const createdUser = await this.request<{ '.id': string }>('PUT', '/ip/hotspot/user', userPayload);
+      createdUserId = createdUser?.['.id'] || null;
+
+      // 3. Programmatically log the device in to HotSpot active table
+      const loginResult = await this.request<{ ret?: string }>('POST', '/ip/hotspot/active/login', {
+        user: input.username,
+        password: input.password,
+        ip: input.ipAddress,
+        'mac-address': input.macAddress.toUpperCase(),
+      });
+
+      return {
+        hotspotUserId: createdUserId || input.username,
+        activeSessionId: loginResult?.ret || input.username,
+      };
+    } catch (err) {
+      // Partial provisioning cleanup on RouterOS failure
+      if (createdUserId) {
+        await this.request('DELETE', `/ip/hotspot/user/${encodeURIComponent(createdUserId)}`).catch(() => {});
+      }
+      if (createdProfile) {
+        const profiles = await this.request<Array<{ '.id': string; comment?: string }>>(
+          'GET',
+          `/ip/hotspot/user/profile?name=${encodeURIComponent(input.profile)}`
+        ).catch(() => []);
+        for (const p of profiles) {
+          if (p.comment === 'rawad-guest-portal-managed') {
+            await this.request('DELETE', `/ip/hotspot/user/profile/${encodeURIComponent(p['.id'])}`).catch(() => {});
+          }
+        }
+      }
+      throw err;
     }
-
-    const createdUser = await this.request<{ '.id': string }>('PUT', '/ip/hotspot/user', {
-      name: input.username,
-      password: input.password,
-      'mac-address': input.macAddress.toUpperCase(),
-      profile: input.profile,
-      server: this.cfg.hotspotServer,
-      comment: 'rawad-guest-portal-managed',
-    });
-
-    // 3. Programmatically log the device in to HotSpot active table
-    const loginResult = await this.request<{ ret?: string }>('POST', '/ip/hotspot/active/login', {
-      user: input.username,
-      password: input.password,
-      ip: input.ipAddress,
-      'mac-address': input.macAddress.toUpperCase(),
-    });
-
-    return {
-      hotspotUserId: createdUser?.['.id'] || input.username,
-      activeSessionId: loginResult?.ret || input.username,
-    };
   }
 
   async revokeHotspotAccess(input: RevokeHotspotAccessInput): Promise<void> {
@@ -233,26 +269,33 @@ export class RouterOSRestClient implements MikroTikAdapter {
     );
     const macUpper = input.macAddress?.toUpperCase();
     for (const a of actives) {
-      if (a.user === input.username || (macUpper && a['mac-address']?.toUpperCase() === macUpper)) {
+      // Never disconnect unrelated sessions belonging to other accounts merely because they share a MAC
+      const userMatches = a.user === input.username;
+      const macMatches = !macUpper || a['mac-address']?.toUpperCase() === macUpper;
+      if (userMatches && macMatches) {
         await this.request('DELETE', `/ip/hotspot/active/${encodeURIComponent(a['.id'])}`);
       }
     }
 
-    const users = await this.request<Array<{ '.id': string }>>(
+    const users = await this.request<Array<{ '.id': string; comment?: string }>>(
       'GET',
       `/ip/hotspot/user?name=${encodeURIComponent(input.username)}`
     );
     for (const u of users) {
-      await this.request('DELETE', `/ip/hotspot/user/${encodeURIComponent(u['.id'])}`);
+      if (u.comment === 'rawad-guest-portal-managed') {
+        await this.request('DELETE', `/ip/hotspot/user/${encodeURIComponent(u['.id'])}`);
+      }
     }
 
-    if (input.profile && input.profile.startsWith('rawad-sess-')) {
-      const profiles = await this.request<Array<{ '.id': string }>>(
+    if (input.profile) {
+      const profiles = await this.request<Array<{ '.id': string; comment?: string }>>(
         'GET',
         `/ip/hotspot/user/profile?name=${encodeURIComponent(input.profile)}`
       );
       for (const p of profiles) {
-        await this.request('DELETE', `/ip/hotspot/user/profile/${encodeURIComponent(p['.id'])}`);
+        if (p.comment === 'rawad-guest-portal-managed') {
+          await this.request('DELETE', `/ip/hotspot/user/profile/${encodeURIComponent(p['.id'])}`);
+        }
       }
     }
   }

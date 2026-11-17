@@ -7,9 +7,11 @@ import type {
   UserRecord,
 } from '../types/index.js';
 import type {
-  CommitFreeSessionResult,
-  CommitUserSessionResult,
+  BeginFreeProvisioningResult,
+  BeginUserProvisioningResult,
   DatabaseClient,
+  FinalizeFreeSessionResult,
+  FinalizeUserSessionResult,
 } from './client.js';
 
 export class SupabaseDatabaseClient implements DatabaseClient {
@@ -129,14 +131,14 @@ export class SupabaseDatabaseClient implements DatabaseClient {
     return (data as FreeQuotaRecord | null) ?? null;
   }
 
-  async commitFreeSession(input: {
+  async beginFreeProvisioning(input: {
     macAddress: string;
     ipAddress: string;
     hotspotUsername: string;
     hotspotProfile: string;
     durationSeconds: number;
-  }): Promise<CommitFreeSessionResult> {
-    const { data, error } = await this.client.rpc('commit_free_session', {
+  }): Promise<BeginFreeProvisioningResult> {
+    const { data, error } = await this.client.rpc('begin_free_provisioning', {
       p_mac: input.macAddress.toUpperCase(),
       p_ip: input.ipAddress,
       p_hs_user: input.hotspotUsername,
@@ -144,21 +146,30 @@ export class SupabaseDatabaseClient implements DatabaseClient {
       p_duration_seconds: input.durationSeconds,
     });
     if (error) throw new Error(error.message);
-    const rows = data as CommitFreeSessionResult[] | null;
-    if (!rows || rows.length === 0) {
-      throw new Error('commit_free_session returned empty result');
-    }
+    const rows = data as BeginFreeProvisioningResult[] | null;
+    if (!rows || rows.length === 0) throw new Error('begin_free_provisioning returned empty');
     return rows[0];
   }
 
-  async commitUserSession(input: {
+  async finalizeFreeSession(sessionId: string, durationSeconds: number): Promise<FinalizeFreeSessionResult> {
+    const { data, error } = await this.client.rpc('finalize_free_session', {
+      p_session_id: sessionId,
+      p_duration_seconds: durationSeconds,
+    });
+    if (error) throw new Error(error.message);
+    const rows = data as FinalizeFreeSessionResult[] | null;
+    if (!rows || rows.length === 0) throw new Error('finalize_free_session returned empty');
+    return rows[0];
+  }
+
+  async beginUserProvisioning(input: {
     userId: string;
     macAddress: string;
     ipAddress: string;
     hotspotUsername: string;
     hotspotProfile: string;
-  }): Promise<CommitUserSessionResult> {
-    const { data, error } = await this.client.rpc('commit_user_session', {
+  }): Promise<BeginUserProvisioningResult> {
+    const { data, error } = await this.client.rpc('begin_user_provisioning', {
       p_user_id: input.userId,
       p_mac: input.macAddress.toUpperCase(),
       p_ip: input.ipAddress,
@@ -166,11 +177,26 @@ export class SupabaseDatabaseClient implements DatabaseClient {
       p_hs_profile: input.hotspotProfile,
     });
     if (error) throw new Error(error.message);
-    const rows = data as CommitUserSessionResult[] | null;
-    if (!rows || rows.length === 0) {
-      throw new Error('commit_user_session returned empty result');
-    }
+    const rows = data as BeginUserProvisioningResult[] | null;
+    if (!rows || rows.length === 0) throw new Error('begin_user_provisioning returned empty');
     return rows[0];
+  }
+
+  async finalizeUserSession(sessionId: string): Promise<FinalizeUserSessionResult> {
+    const { data, error } = await this.client.rpc('finalize_user_session', {
+      p_session_id: sessionId,
+    });
+    if (error) throw new Error(error.message);
+    const rows = data as FinalizeUserSessionResult[] | null;
+    if (!rows || rows.length === 0) throw new Error('finalize_user_session returned empty');
+    return rows[0];
+  }
+
+  async abortProvisioning(sessionId: string): Promise<void> {
+    const { error } = await this.client.rpc('abort_provisioning', {
+      p_session_id: sessionId,
+    });
+    if (error) throw new Error(error.message);
   }
 
   async getActiveSessionByMac(macAddress: string): Promise<SessionRecord | null> {

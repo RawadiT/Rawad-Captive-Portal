@@ -1,10 +1,10 @@
-# PROGRESS.md — Security & Reliability Remediation Log
+# PROGRESS.md — Second Independent Audit Remediation
 
-**Baseline Commit:** `cb22747a99c7615d39e7c58991044fffb0e0cc32`  
-**Status:** Remediation Complete Locally (Live Supabase & MikroTik Tests NOT RUN — Not Deployed)
+**Baseline Commit:** `0242e3ca46f7864554097033c7041217dceef2d3`  
+**Status:** Complete Locally (Live Supabase & MikroTik Tests NOT RUN — Not Deployed)
 
-- **Phase 1 (Supabase Security):** Hardened `supabase/schema.sql` (`SET search_path = pg_catalog, public`, revoked `PUBLIC`/`anon`/`authenticated`, granted `service_role`, added input validation, partial unique indexes, and `pg_advisory_xact_lock`).
-- **Phase 2 (Session & Quota Reliability):** Refactored `QuotaService` + `DatabaseClient` to 2-phase MikroTik-first provisioning with compensating revoke on DB failure and PostgreSQL-level advisory locking.
-- **Phase 3 (MikroTik Safety):** Removed `mac-cookie` from `rawad-hs-prof`, tagged managed HotSpot users/profiles with `comment="rawad-guest-portal-managed"`, and eliminated broad prefix deletion in `rollback.rsc`.
-- **Phase 4 & 5 (Deployment, USB & Docs):** Fixed `install-linux.sh`, `next.config.mjs` API rewrite, `start-windows.bat` `--env-file`, `docker-compose.yml` healthchecks, `README.md`, and `DEPLOYMENT.md`.
-- **Phase 6 (Verification):** Backend `tsc`, Frontend `tsc --noEmit` & `next build`, SQL static review (8/8), RouterOS static review, Docker & USB package validation (HTTP 200 on `/` & `/admin`, fail-closed Backend) all passed. Live Supabase & MikroTik tests: NOT RUN.
+- **R2.1:** `grantHotspotAccess` now binds `mac-address` ONLY when `bindMac=true` (free quota), never on ordinary accounts (`bindMac=false`); `revokeHotspotAccess` matches `a.user === input.username && (!macUpper || a['mac-address'] === macUpper)` so unrelated accounts sharing a MAC are never disconnected.
+- **R2.2:** Added idempotent legacy RPC privilege revocation & `DROP FUNCTION IF EXISTS` for `claim_free_quota(TEXT, INTEGER)` and `activate_user_on_first_login(UUID)`, plus `'provisioning'` status and partial unique indexes covering `('provisioning', 'active')`.
+- **R2.3:** Implemented 3-step PostgreSQL-locked provisioning (`begin_*_provisioning` -> MikroTik -> `finalize_*_session` / `abort_provisioning`), partial RouterOS resource cleanup on failure, and strict fail-loud revocation before marking DB sessions disconnected.
+- **R2.4:** Added individual firewall rule ownership flags (`rawadCreatedFw*`, `rawadCreatedV6*`), pre-existing `rawad-*` conflict abort, DNS open-resolver preflight notice, and ownership-gated `rollback.rsc`.
+- **R2.5:** Bound `127.0.0.1:4000:4000` in `deployment/docker-compose.yml` and aligned `DEPLOYMENT.md`.
