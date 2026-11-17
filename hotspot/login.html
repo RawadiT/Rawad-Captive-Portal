@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="pragma" content="no-cache" />
+  <meta http-equiv="expires" content="-1" />
+  <title>روتانا - شركة رواد التقنيات | تسجيل الدخول</title>
+  <link rel="stylesheet" href="assets/style.css" />
+  <script>
+    (function () {
+      var portalBase = "https://wifi.YOUR_COMPANY_DOMAIN.com";
+      var mac = "$(mac)";
+      var ip = "$(ip)";
+      var target = portalBase + "/?mac=" + encodeURIComponent(mac) + "&ip=" + encodeURIComponent(ip);
+      window.location.replace(target);
+    })();
+  </script>
+</head>
+<body>
+  <main class="card">
+    <img src="assets/logo.png" alt="شعار شركة رواد التقنيات" class="logo" />
+    <h1>روتانا - شركة رواد التقنيات</h1>
+    <p>جارٍ توجيهك عبر اتصال آمن إلى بوابة الدخول...</p>
+    $(if error)<div class="err">$(error)</div>$(endif)
+    <a class="btn" href="https://wifi.YOUR_COMPANY_DOMAIN.com/?mac=$(mac-esc)&ip=$(ip)">الانتقال إلى بوابة الدخول</a>
+  </main>
+</body>
+</html>

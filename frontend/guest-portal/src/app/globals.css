@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: 'Cairo';
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url('/fonts/cairo-arabic.woff2') format('woff2');
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-08FF, U+FB50-FDFF, U+FE70-FEFF;
+}
+
+@font-face {
+  font-family: 'Cairo';
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url('/fonts/cairo-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+FEFF, U+FFFD;
+}
+
+html,
+body {
+  font-family: 'Cairo', Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+@keyframes floatSlow {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(10px, -18px, 0) rotate(4deg);
+  }
+}
+
+@keyframes floatMedium {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(-14px, -22px, 0) rotate(-5deg);
+  }
+}
+
+@keyframes floatFast {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(8px, 16px, 0) scale(1.04);
+  }
+}
+
+.tech-float-slow {
+  animation: floatSlow 14s ease-in-out infinite;
+  will-change: transform;
+}
+
+.tech-float-medium {
+  animation: floatMedium 10s ease-in-out infinite;
+  will-change: transform;
+}
+
+.tech-float-fast {
+  animation: floatFast 7.5s ease-in-out infinite;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tech-float-slow,
+  .tech-float-medium,
+  .tech-float-fast {
+    animation: none !important;
+  }
+}

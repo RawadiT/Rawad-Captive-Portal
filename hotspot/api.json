@@ -1,0 +1,4 @@
+{
+  "_comment": "Static fallback removed; RFC 8908 CAPPORT is served dynamically via HTTPS at https://wifi.YOUR_COMPANY_DOMAIN.com/api/guest/capport (DHCP Option 114).",
+  "user-portal-url": "https://wifi.YOUR_COMPANY_DOMAIN.com"
+}
