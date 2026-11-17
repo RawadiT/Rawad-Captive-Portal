@@ -193,7 +193,7 @@ if (pgExec) {
     pgExec(`SELECT public.verify_mac_authorization('${macExp}', '192.168.20.15', '${t0}'::timestamptz);`);
     pgExec(`UPDATE public.sessions SET created_at = '${t0}'::timestamptz WHERE id = '${sessExp}';`);
     const expChecks = pgExec(`SELECT (EXTRACT(EPOCH FROM ('${tPlus4h}'::timestamptz - created_at)) >= 14400)::text || '|' || (expires_at < '${tPlus4h}'::timestamptz)::text FROM public.sessions WHERE id = '${sessExp}';`);
-    assert.equal(expChecks, 't|t', 'sessExp must have created_at >= 4h older than p_now and expires_at < p_now');
+    assert.equal(expChecks, 'true|true', 'sessExp must have created_at >= 4h older than p_now and expires_at < p_now');
     const revExp = pgExec(`SELECT session_id FROM public.get_revoked_sessions('${tPlus4h}'::timestamptz);`);
     assert.ok(revExp.includes(sessExp), 'Expired session long after creation must appear in get_revoked_sessions');
     pgExec(`SELECT public.ack_revoked_sessions(ARRAY['${sessExp}']::uuid[]);`);
