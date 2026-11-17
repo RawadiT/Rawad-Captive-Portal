@@ -47,6 +47,20 @@ export class QuotaService {
     this.now = cfg.nowProvider ?? (() => new Date());
   }
 
+  private async withLeaseRenewal<T>(sessionId: string, fn: () => Promise<T>): Promise<T> {
+    const timer = setInterval(() => {
+      void this.db.renewProvisioningLease(sessionId, 60).catch((err) => {
+        console.error('[LeaseRenewal] failed:', err instanceof Error ? err.message : err);
+      });
+    }, 45_000);
+    timer.unref();
+    try {
+      return await fn();
+    } finally {
+      clearInterval(timer);
+    }
+  }
+
   private async revokeStrictWithRetry(
     username: string,
     macAddress: string,
@@ -160,15 +174,17 @@ export class QuotaService {
     }
 
     try {
-      await this.mikrotik.grantHotspotAccess({
-        username: hotspotUsername,
-        password: hotspotPassword,
-        macAddress: mac,
-        ipAddress: input.ipAddress,
-        bindMac: true,
-        sessionTimeoutSeconds: begin.remaining_seconds,
-        profile: hotspotProfile,
-      });
+      await this.withLeaseRenewal(begin.session_id, () =>
+        this.mikrotik.grantHotspotAccess({
+          username: hotspotUsername,
+          password: hotspotPassword,
+          macAddress: mac,
+          ipAddress: input.ipAddress,
+          bindMac: true,
+          sessionTimeoutSeconds: begin.remaining_seconds,
+          profile: hotspotProfile,
+        })
+      );
     } catch (err) {
       await this.db.abortProvisioning(begin.session_id).catch((e) =>
         console.error('[Recovery] abortProvisioning failed:', e)
@@ -278,15 +294,17 @@ export class QuotaService {
     }
 
     try {
-      await this.mikrotik.grantHotspotAccess({
-        username: hotspotUsername,
-        password: hotspotPassword,
-        macAddress: mac,
-        ipAddress: input.ipAddress,
-        bindMac: false, // Ordinary accounts must NOT store a MAC restriction
-        sessionTimeoutSeconds: begin.remaining_seconds,
-        profile: hotspotProfile,
-      });
+      await this.withLeaseRenewal(begin.session_id, () =>
+        this.mikrotik.grantHotspotAccess({
+          username: hotspotUsername,
+          password: hotspotPassword,
+          macAddress: mac,
+          ipAddress: input.ipAddress,
+          bindMac: false, // Ordinary accounts must NOT store a MAC restriction
+          sessionTimeoutSeconds: begin.remaining_seconds,
+          profile: hotspotProfile,
+        })
+      );
     } catch (err) {
       await this.db.abortProvisioning(begin.session_id).catch((e) =>
         console.error('[Recovery] abortProvisioning failed:', e)

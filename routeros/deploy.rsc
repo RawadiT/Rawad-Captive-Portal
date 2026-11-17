@@ -40,14 +40,40 @@
 :if ([:len [/certificate find where name=$mikrotikCertName]] = 0) do={
     :error ("ABORT: Certificate '" . $mikrotikCertName . "' not found. Import MikroTik TLS cert first.")
 }
-:if ([/ip dns get allow-remote-requests] = false && [:len [/ip firewall filter find where chain="input" && action="drop" && dst-port~"53" && disabled=no]] = 0) do={
-    :error "ABORT: Cannot enable allow-remote-requests=yes without an existing active input firewall rule dropping external DNS (port 53), which would expose an open resolver. Configure your WAN DNS drop rule manually before deploying."
+
+# Strict DNS Open-Resolver Gate: verify WAN input firewall drops BOTH TCP and UDP port 53 (read-only check, never modifies WAN)
+:if ([/ip dns get allow-remote-requests] = false) do={
+    :local wanIf ""
+    :local defRoutes [/ip route find where dst-address="0.0.0.0/0" && active=yes]
+    :if ([:len $defRoutes] > 0) do={
+        :set wanIf [/ip route get [:pick $defRoutes 0] immediate-gw]
+    }
+    :local hasWanUdp53 false
+    :local hasWanTcp53 false
+    :foreach rid in=[/ip firewall filter find where chain="input" && action="drop" && disabled=no] do={
+        :local rInIf [/ip firewall filter get $rid in-interface]
+        :local rInList [/ip firewall filter get $rid in-interface-list]
+        :local rProto [/ip firewall filter get $rid protocol]
+        :local rPort [/ip firewall filter get $rid dst-port]
+        :local isWanScope ($rInList = "WAN" || ($wanIf != "" && $wanIf ~ $rInIf && $rInIf != "" && $rInIf != $guestIf))
+        :if ($isWanScope) do={
+            :if (($rProto = "udp" && $rPort ~ "53") || ($rProto = "" && $rPort = "")) do={
+                :set hasWanUdp53 true
+            }
+            :if (($rProto = "tcp" && $rPort ~ "53") || ($rProto = "" && $rPort = "")) do={
+                :set hasWanTcp53 true
+            }
+        }
+    }
+    :if ($hasWanUdp53 = false || $hasWanTcp53 = false) do={
+        :error "ABORT: Cannot prove WAN input firewall drops BOTH TCP and UDP port 53 (open resolver risk). Configure WAN input drop rules for TCP/UDP 53 manually before deploying."
+    }
 }
 
-# Never claim ownership of pre-existing non-project resources on initial deploy
+# Never claim ownership of ANY pre-existing non-project resource on initial deploy
 :if ([:len [/system script find where name="rawad-portal-state"]] = 0) do={
-    :if ([:len [/ip pool find where name="rawad-guest-pool"]] > 0 || [:len [/ip dhcp-server find where name="rawad-guest-dhcp"]] > 0 || [:len [/ip dhcp-server option find where name="rawad-capport-114"]] > 0 || [:len [/ip hotspot profile find where name="rawad-hs-prof"]] > 0 || [:len [/ip hotspot find where name="rawad-guest-hotspot"]] > 0 || [:len [/user find where name="rawad-api"]] > 0 || [:len [/user group find where name="rawad-api-group"]] > 0) do={
-        :error "ABORT: Pre-existing rawad-* resource found without rawad-portal-state. Resolve manually before deploying."
+    :if ([:len [/ip pool find where name="rawad-guest-pool"]] > 0 || [:len [/ip dhcp-server find where name="rawad-guest-dhcp"]] > 0 || [:len [/ip dhcp-server option find where name="rawad-capport-114"]] > 0 || [:len [/ip hotspot profile find where name="rawad-hs-prof"]] > 0 || [:len [/ip hotspot find where name="rawad-guest-hotspot"]] > 0 || [:len [/ip hotspot walled-garden ip find where comment="rawad-guest-portal-allow-https"]] > 0 || [:len [/ip firewall nat find where comment="rawad-guest-portal-nat"]] > 0 || [:len [/ip dns static find where name=$portalDomain]] > 0 || [:len [/user find where name="rawad-api"]] > 0 || [:len [/user group find where name="rawad-api-group"]] > 0) do={
+        :error "ABORT: Pre-existing rawad-* resource or static DNS entry found without rawad-portal-state. Resolve manually before deploying."
     }
 }
 

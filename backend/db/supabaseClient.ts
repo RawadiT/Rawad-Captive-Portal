@@ -206,6 +206,21 @@ export class SupabaseDatabaseClient implements DatabaseClient {
     if (error) throw new Error(error.message);
   }
 
+  async reclaimExpiredProvisioningLeases(): Promise<number> {
+    const { data, error } = await this.client.rpc('reclaim_expired_provisioning_leases');
+    if (error) throw new Error(error.message);
+    return Number(data ?? 0);
+  }
+
+  async renewProvisioningLease(sessionId: string, extendSeconds = 60): Promise<boolean> {
+    const { data, error } = await this.client.rpc('renew_provisioning_lease', {
+      p_session_id: sessionId,
+      p_extend_seconds: extendSeconds,
+    });
+    if (error) throw new Error(error.message);
+    return Boolean(data);
+  }
+
   async getActiveSessionByMac(macAddress: string): Promise<SessionRecord | null> {
     const { data, error } = await this.client
       .from('sessions')

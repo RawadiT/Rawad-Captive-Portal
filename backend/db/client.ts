@@ -81,6 +81,10 @@ export interface DatabaseClient {
 
   markRevocationPending(sessionId: string): Promise<void>;
 
+  reclaimExpiredProvisioningLeases(): Promise<number>;
+
+  renewProvisioningLease(sessionId: string, extendSeconds?: number): Promise<boolean>;
+
   // Sessions
   getActiveSessionByMac(macAddress: string): Promise<SessionRecord | null>;
   listActiveSessions(): Promise<SessionRecord[]>;

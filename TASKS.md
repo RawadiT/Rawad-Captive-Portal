@@ -1,10 +1,9 @@
-# TASKS.md — Third Audit Remediation
+# TASKS.md — Fourth Audit Remediation
 
-**Baseline Commit:** `2acf6f356922302de393cd4cdc88e27f6953de22`
+**Baseline Commit:** `b5787b5caf59cc4cdef14564416382cd686ca2d1`
 
-- [x] **A3.1** Fix PostgreSQL provisioning lease (`lease_expires_at`, no 30s premature release, validate lease in `finalize_*`, add `'revocation_pending'` status) in `supabase/schema.sql`.
-- [x] **A3.2** Fix failure recovery in `quotaService.ts` & `sessionMonitor.ts` (no `.catch(() => {})` on compensating revoke, keep `'revocation_pending'` if revoke fails, never mark `'expired'`/`'disconnected'` before RouterOS revoke succeeds).
-- [x] **A3.3** Remove runtime user/profile deletion from `routeros/rollback.rsc`; keep only `deploy.rsc`-owned resources.
-- [x] **A3.4** Add mandatory DNS open-resolver abort gate in `routeros/deploy.rsc` before setting `allow-remote-requests=yes` (without modifying WAN).
-- [x] **A3.5** Update `DEPLOYMENT.md` to match the 3-step RPCs (`begin_*`, `finalize_*`, `abort_provisioning`, `revocation_pending`).
-- [x] **A3.6** Run all builds, static validations, USB package validation, commit & push to `main`.
+- [x] **A4.1** Add legacy `provisioning` `lease_expires_at` backfill + `reclaim_expired_provisioning_leases` + `renew_provisioning_lease` RPCs in `supabase/schema.sql`.
+- [x] **A4.2** Wire `reclaimExpiredProvisioningLeases`, `renewProvisioningLease`, and concurrent revocation guard (`revokingSessionIds`) in `backend/`.
+- [x] **A4.3** Harden WAN TCP+UDP port 53 DNS security gate in `routeros/deploy.rsc` (never accept non-WAN rules, abort if unproven, never modify WAN).
+- [x] **A4.4** Verify all ownership flags in `deploy.rsc` and `rollback.rsc` (including DHCP, DNS, NAT, Firewall, HotSpot, API).
+- [x] **A4.5** Run all builds, TypeScript checks, lease/recovery/DNS-gate simulations, SQL/RouterOS/Docker/USB validations, update `PROGRESS.md`, commit & push to `main`.

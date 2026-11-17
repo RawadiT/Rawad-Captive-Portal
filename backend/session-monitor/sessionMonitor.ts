@@ -1,10 +1,11 @@
 import type { DatabaseClient } from '../db/client.js';
 import type { MikroTikAdapter } from '../mikrotik/adapter.js';
 import { normalizeMac } from '../quota-manager/macUtils.js';
-import type { MikroTikActiveSession } from '../types/index.js';
+import type { MikroTikActiveSession, SessionRecord } from '../types/index.js';
 
 export class SessionMonitor {
   private timer: NodeJS.Timeout | null = null;
+  private readonly revokingSessionIds = new Set<string>();
   private readonly now: () => Date;
 
   constructor(
@@ -35,11 +36,44 @@ export class SessionMonitor {
     }
   }
 
+  private async revokeAndFinalizeSession(
+    s: SessionRecord,
+    targetStatus: 'expired' | 'disconnected'
+  ): Promise<boolean> {
+    if (this.revokingSessionIds.has(s.id)) {
+      return false; // Prevent duplicate concurrent revocations on the same session
+    }
+    this.revokingSessionIds.add(s.id);
+    try {
+      await this.mikrotik.revokeHotspotAccess({
+        username: s.hotspot_username,
+        macAddress: s.mac_address,
+        profile: s.hotspot_profile,
+      });
+      await this.db.updateSessionStatus(s.id, targetStatus);
+      return true;
+    } finally {
+      this.revokingSessionIds.delete(s.id);
+    }
+  }
+
   async syncSessions(): Promise<{
+    reclaimedLeases: number;
     expiredCount: number;
     disconnectedCount: number;
     orphansRevoked: number;
   }> {
+    // 0. Periodically reclaim expired 'provisioning' leases -> 'revocation_pending' even without user traffic
+    let reclaimedLeases = 0;
+    try {
+      reclaimedLeases = await this.db.reclaimExpiredProvisioningLeases();
+    } catch (err) {
+      console.error(
+        '[SessionMonitor] reclaimExpiredProvisioningLeases failed:',
+        err instanceof Error ? err.message : err
+      );
+    }
+
     let mikrotikActive: MikroTikActiveSession[] = [];
     let mikrotikReachable = false;
     try {
@@ -53,12 +87,7 @@ export class SessionMonitor {
     const pendingRevokes = await this.db.listRevocationPendingSessions();
     for (const p of pendingRevokes) {
       try {
-        await this.mikrotik.revokeHotspotAccess({
-          username: p.hotspot_username,
-          macAddress: p.mac_address,
-          profile: p.hotspot_profile,
-        });
-        await this.db.updateSessionStatus(p.id, 'disconnected');
+        await this.revokeAndFinalizeSession(p, 'disconnected');
       } catch (err) {
         console.error(
           `[SessionMonitor] Retry revoke failed for revocation_pending '${p.hotspot_username}':`,
@@ -85,15 +114,9 @@ export class SessionMonitor {
       const missingOnRouter = mikrotikReachable && !activeByKey.has(key);
 
       if (isExpired) {
-        // NEVER mark 'expired' in DB before RouterOS revocation succeeds; keep 'active' so next tick retries
         try {
-          await this.mikrotik.revokeHotspotAccess({
-            username: s.hotspot_username,
-            macAddress: s.mac_address,
-            profile: s.hotspot_profile,
-          });
-          await this.db.updateSessionStatus(s.id, 'expired');
-          expiredCount++;
+          const done = await this.revokeAndFinalizeSession(s, 'expired');
+          if (done) expiredCount++;
         } catch (err) {
           console.error(
             `[SessionMonitor] Failed to revoke expired session '${s.hotspot_username}' (kept active for retry):`,
@@ -101,7 +124,6 @@ export class SessionMonitor {
           );
         }
       } else if (missingOnRouter) {
-        // RouterOS already confirmed session is absent from /ip/hotspot/active
         await this.db.updateSessionStatus(s.id, 'disconnected');
         disconnectedCount++;
       } else {
@@ -127,7 +149,7 @@ export class SessionMonitor {
       }
     }
 
-    return { expiredCount, disconnectedCount, orphansRevoked };
+    return { reclaimedLeases, expiredCount, disconnectedCount, orphansRevoked };
   }
 
   async disconnectByMac(macAddress: string): Promise<void> {
@@ -135,12 +157,6 @@ export class SessionMonitor {
     const active = await this.db.getActiveSessionByMac(mac);
     if (!active) return;
 
-    // NEVER mark session disconnected in PostgreSQL if RouterOS revocation fails
-    await this.mikrotik.revokeHotspotAccess({
-      username: active.hotspot_username,
-      macAddress: active.mac_address,
-      profile: active.hotspot_profile,
-    });
-    await this.db.updateSessionStatus(active.id, 'disconnected');
+    await this.revokeAndFinalizeSession(active, 'disconnected');
   }
 }

@@ -55,6 +55,11 @@ CREATE TABLE IF NOT EXISTS public.sessions (
 -- Safe idempotent upgrade for existing sessions columns, constraints & partial unique indexes
 ALTER TABLE public.sessions ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMPTZ NULL;
 
+-- Backfill any legacy 'provisioning' rows that lack lease_expires_at (do NOT touch 'active' rows)
+UPDATE public.sessions
+SET lease_expires_at = created_at + INTERVAL '2 minutes'
+WHERE status = 'provisioning' AND lease_expires_at IS NULL;
+
 DO $$
 BEGIN
   IF EXISTS (
@@ -443,6 +448,60 @@ BEGIN
 END;
 $$;
 
+-- Periodically reclaim expired 'provisioning' leases -> 'revocation_pending' even without new user requests
+CREATE OR REPLACE FUNCTION public.reclaim_expired_provisioning_leases()
+RETURNS INTEGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_count INTEGER;
+BEGIN
+  WITH reclaimed AS (
+    UPDATE public.sessions
+    SET status = 'revocation_pending', lease_expires_at = NULL
+    WHERE status = 'provisioning'
+      AND lease_expires_at IS NOT NULL
+      AND lease_expires_at < clock_timestamp()
+    RETURNING id
+  )
+  SELECT COUNT(*)::INTEGER INTO v_count FROM reclaimed;
+
+  RETURN COALESCE(v_count, 0);
+END;
+$$;
+
+-- Renew an active 'provisioning' reservation lease during slow MikroTik provisioning
+CREATE OR REPLACE FUNCTION public.renew_provisioning_lease(
+  p_session_id UUID,
+  p_extend_seconds INTEGER DEFAULT 60
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_now TIMESTAMPTZ := clock_timestamp();
+BEGIN
+  IF p_session_id IS NULL THEN
+    RAISE EXCEPTION 'Session ID is required';
+  END IF;
+  IF p_extend_seconds IS NULL OR p_extend_seconds < 10 OR p_extend_seconds > 300 THEN
+    RAISE EXCEPTION 'Invalid lease extension seconds';
+  END IF;
+
+  UPDATE public.sessions
+  SET lease_expires_at = GREATEST(COALESCE(lease_expires_at, v_now), v_now) + make_interval(secs => p_extend_seconds)
+  WHERE id = p_session_id
+    AND status = 'provisioning'
+    AND (lease_expires_at IS NULL OR lease_expires_at >= v_now);
+
+  RETURN FOUND;
+END;
+$$;
+
 REVOKE ALL ON FUNCTION public.begin_free_provisioning(TEXT, TEXT, TEXT, TEXT, INTEGER) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.begin_free_provisioning(TEXT, TEXT, TEXT, TEXT, INTEGER) TO service_role;
 
@@ -460,3 +519,9 @@ GRANT EXECUTE ON FUNCTION public.abort_provisioning(UUID) TO service_role;
 
 REVOKE ALL ON FUNCTION public.mark_revocation_pending(UUID) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.mark_revocation_pending(UUID) TO service_role;
+
+REVOKE ALL ON FUNCTION public.reclaim_expired_provisioning_leases() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.reclaim_expired_provisioning_leases() TO service_role;
+
+REVOKE ALL ON FUNCTION public.renew_provisioning_lease(UUID, INTEGER) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.renew_provisioning_lease(UUID, INTEGER) TO service_role;
