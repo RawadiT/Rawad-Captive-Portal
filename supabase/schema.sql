@@ -552,8 +552,9 @@ SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
-  v_now TIMESTAMPTZ := clock_timestamp();
   v_lock public.monitor_locks%ROWTYPE;
+  v_lock_name TEXT := TRIM(COALESCE(p_lock_name, ''));
+  v_owner_id TEXT := TRIM(COALESCE(p_owner_id, ''));
 BEGIN
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'Session ID is required';
@@ -561,18 +562,23 @@ BEGIN
   IF p_status IS NULL OR p_status NOT IN ('provisioning', 'active', 'expired', 'disconnected', 'revocation_pending') THEN
     RAISE EXCEPTION 'Invalid session status: %', COALESCE(p_status, '<null>');
   END IF;
+  IF p_fence_token IS NULL OR v_lock_name = '' OR v_owner_id = '' THEN
+    RETURN false;
+  END IF;
 
-  -- Lock the monitor_locks row for the duration of this transaction so no other backend
+  -- Acquire transactional row lock on monitor_locks FIRST so no other backend
   -- can acquire/steal the lock between ownership verification and the session update.
   SELECT * INTO v_lock
   FROM public.monitor_locks ml
-  WHERE ml.lock_name = TRIM(COALESCE(p_lock_name, ''))
+  WHERE ml.lock_name = v_lock_name
   FOR UPDATE;
 
+  -- Validate ownership, fence_token (IS DISTINCT FROM), and lease expiry AFTER acquiring row lock
+  -- using clock_timestamp() directly so a lease expiring while waiting is rejected.
   IF NOT FOUND
-     OR v_lock.owner_id <> TRIM(COALESCE(p_owner_id, ''))
-     OR v_lock.fence_token <> p_fence_token
-     OR v_lock.lease_expires_at < v_now THEN
+     OR v_lock.owner_id IS DISTINCT FROM v_owner_id
+     OR v_lock.fence_token IS DISTINCT FROM p_fence_token
+     OR v_lock.lease_expires_at < clock_timestamp() THEN
     RETURN false;
   END IF;
 

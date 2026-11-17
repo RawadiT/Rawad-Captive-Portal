@@ -1,7 +1,8 @@
-# TASKS.md — Final Focused Audit (PostgreSQL Fencing Race)
+# TASKS.md — Final Closure (PostgreSQL Fencing Hardening)
 
-**Baseline Commit:** `6850f913db7f45a7b82d15cc5c6cf32c32398411`
+**Baseline Commit:** `68554ae71fe40eee66e5a250d5a92e80dfe1a6b3`
 
-- [x] **F1** Make `public.fenced_update_session_status()` in `supabase/schema.sql` lock the `monitor_locks` row with `SELECT ... FOR UPDATE`, validate `p_status`, and return `FOUND` (`false` if no session row was updated).
-- [x] **F2** Add concurrency test (`verify_fencing_race.mjs`) proving `FOR UPDATE` blocks Backend B until Backend A's transaction completes, rejects stale `fence_token` from A after B takes ownership, rejects expired locks, and rejects invalid `p_status` / missing session.
-- [x] **F3** Re-run Fifth, Sixth, and Seventh Audit suites, Backend & Frontend builds, SQL & RouterOS static checks, USB build & smoke test, update `PROGRESS.md`, commit & push to `main`.
+- [x] **C1** Reject `p_fence_token IS NULL`, empty `p_lock_name`/`p_owner_id`, and use `IS DISTINCT FROM` in `public.fenced_update_session_status()` (`supabase/schema.sql`).
+- [x] **C2** Acquire `SELECT ... FOR UPDATE` on `monitor_locks` FIRST, then validate `v_lock.lease_expires_at < clock_timestamp()` after acquiring the row lock.
+- [x] **C3** Commit `tests/verify_fencing_race.mjs` implementing a real 2-connection `psql` concurrency & fencing test suite (8 cases + cleanup).
+- [x] **C4** Run Fifth, Sixth, and Seventh Audit suites, Backend & Frontend builds, SQL & RouterOS static checks, USB build & smoke test, update `PROGRESS.md`, commit & push to `main`.
