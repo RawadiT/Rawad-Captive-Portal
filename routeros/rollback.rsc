@@ -36,8 +36,8 @@
     /ip firewall nat remove [find where comment="rawad-guest-portal-nat"]
 }
 
-/ip hotspot user remove [find where name~"^(free-|usr-)"]
-/ip hotspot user profile remove [find where name~"^rawad-sess-"]
+/ip hotspot user remove [find where comment="rawad-guest-portal-managed"]
+/ip hotspot user profile remove [find where comment="rawad-guest-portal-managed"]
 
 :if ($rawadCreatedHsSrv = true) do={
     /ip hotspot remove [find where name="rawad-guest-hotspot"]

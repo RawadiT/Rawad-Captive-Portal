@@ -181,6 +181,7 @@ export class RouterOSRestClient implements MikroTikAdapter {
           'session-timeout': timeoutStr,
           'keepalive-timeout': '00:02:00',
           'shared-users': '1',
+          comment: 'rawad-guest-portal-managed',
         }
       );
     } else {
@@ -189,6 +190,7 @@ export class RouterOSRestClient implements MikroTikAdapter {
         'session-timeout': timeoutStr,
         'keepalive-timeout': '00:02:00',
         'shared-users': '1',
+        comment: 'rawad-guest-portal-managed',
       });
     }
 
@@ -207,6 +209,7 @@ export class RouterOSRestClient implements MikroTikAdapter {
       'mac-address': input.macAddress.toUpperCase(),
       profile: input.profile,
       server: this.cfg.hotspotServer,
+      comment: 'rawad-guest-portal-managed',
     });
 
     // 3. Programmatically log the device in to HotSpot active table

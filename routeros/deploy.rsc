@@ -105,7 +105,8 @@
 
 :put "=== [6/10] Creating HotSpot Server Profile & Server on ether10 ==="
 :if ([:len [/ip hotspot profile find where name="rawad-hs-prof"]] = 0) do={
-    /ip hotspot profile add name="rawad-hs-prof" hotspot-address=$guestGw html-directory="hotspot" login-by=http-chap,http-pap,mac-cookie use-radius=no
+    # Do NOT enable mac-cookie: ordinary accounts must not be bound to MAC and expired/disabled sessions must not auto-relogin
+    /ip hotspot profile add name="rawad-hs-prof" hotspot-address=$guestGw html-directory="hotspot" login-by=http-chap,http-pap use-radius=no
 }
 :if ([:len [/ip hotspot find where name="rawad-guest-hotspot"]] = 0) do={
     /ip hotspot add name="rawad-guest-hotspot" interface=$guestIf address-pool="rawad-guest-pool" profile="rawad-hs-prof" disabled=no

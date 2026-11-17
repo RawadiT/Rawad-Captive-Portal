@@ -1,54 +1,56 @@
 # دليل التشغيل والنشر والنقل على USB — روتانا - شركة رواد التقنيات
 
-## 1. محتويات حزمة USB (`usb-package/`)
-تم تجهيز مجلد `usb-package/` ليكون مستقلاً ومخصصاً للنقل على USB إلى كمبيوتر الشركة، ويحتوي فقط على:
-- `backend/` (ملفات الإنتاج المبنية `dist/` + `node_modules` الإنتاجية فقط).
-- `frontend/` (نسخة Next.js Standalone المبنية مسبقاً بدون `devDependencies` أو `cache`).
-- `supabase/schema.sql` (مخطط PostgreSQL والدوال الذرية).
-- `routeros/` (`preflight.rsc`, `deploy.rsc`, `verify.rsc`, `rollback.rsc` محصورة بـ `ether10` فقط).
-- `hotspot/` (صفحات HotSpot التقليدية الاحتياطية).
-- `deployment/` (`docker-compose.yml`, `.env.example`, `nginx/nginx.conf`, سكربتات الشهادات).
-- `start-windows.bat` (لتشغيل الخادم والواجهة مباشرة على Windows).
+## 1. البنية المعتمدة
+- **قاعدة البيانات:** `Supabase PostgreSQL` (عبر HTTPS من Backend فقط باستخدام `SUPABASE_SERVICE_ROLE_KEY`). لا توجد أي قاعدة بيانات محلية أو SQLite.
+- **الحصة المجانية:** 30 دقيقة مرة واحدة فقط لكل `MAC Address` بنظام `Wall-Clock` UTC (لا يوجد تجديد يومي).
+- **الحسابات المدفوعة/المخصصة:** تبدأ مدتها عند أول تسجيل دخول ناجح بنظام `Wall-Clock` UTC ولا ترتبط بـ `MAC`.
+- **فرض انتهاء الصلاحية:** يفرضه MikroTik فعلياً عبر `session-timeout` في Profile مخصص لكل جلسة (`comment="rawad-guest-portal-managed"`).
+- **تدفق المعاملات والاسترداد (Transaction & Failure-Recovery):**
+  1. يتحقق Backend أولاً (قراءة فقط) من الصلاحية دون استهلاك الحصة المجانية أو بدء `started_at` للحساب.
+  2. ينفّذ Backend تفعيل الجلسة على MikroTik أولاً؛ فإذا فشل MikroTik لا تُستهلك الحصة المجانية ولا تبدأ مدة الحساب.
+  3. ينفّذ Backend دالة PostgreSQL الذرية (`commit_free_session` أو `commit_user_session` المحمية بـ `pg_advisory_xact_lock` وفهارس الجلسة النشطة الفريدة). وإذا فشل الحفظ في Supabase، ينفّذ Backend إلغاءً تعويضياً فورياً على MikroTik.
 
 ---
 
-## 2. متطلبات التشغيل على كمبيوتر الشركة
-- **Node.js v22+** (أو Docker + Docker Compose).
-- **اتصال إنترنت/HTTPS** من كمبيوتر الخادم فقط إلى مشروع **Supabase** (عبر المنفذ 443).
-- **ملاحظة حول الاعتماديات:** جميع حزم Node.js المطلوبة للتشغيل مضمّنة مسبقاً داخل `usb-package/` ولا تحتاج `npm install` غداً. أما **إنشاء مشروع Supabase** وتطبيق `supabase/schema.sql` فيتطلبان الوصول إلى لوحة Supabase.
+## 2. محتويات حزمة USB (`usb-package/`)
+تُبنى الحزمة عبر `.\deployment\build-usb-package.ps1` وتحتوي فقط على ملفات التشغيل الإنتاجية (دون أسرار أو اختبارات):
+- `backend/` (`dist/` + `node_modules` الإنتاجية فقط)
+- `frontend/` (Next.js standalone)
+- `supabase/schema.sql`
+- `routeros/` (`preflight.rsc`, `deploy.rsc`, `verify.rsc`, `rollback.rsc`)
+- `hotspot/`
+- `deployment/` (`docker-compose.yml`, `.env.example`, `nginx/nginx.conf`, سكربتات الشهادات)
+- `start-windows.bat` و`DEPLOYMENT.md`
 
 ---
 
-## 3. خطوات إعداد Supabase PostgreSQL
-1. أنشئ مشروعاً في Supabase (أو افتح مشروعك الحالي).
-2. افتح **SQL Editor** والصق محتوى `supabase/schema.sql` ونفّذه بالكامل.
-3. من **Project Settings -> API**:
-   - انسخ `Project URL` (`SUPABASE_URL`).
-   - انسخ `service_role` key (`SUPABASE_SERVICE_ROLE_KEY`).
-   - **تحذير:** لا تضع `service_role` key في Frontend أو المتصفح إطلاقاً؛ يوضع في `deployment/.env` للخادم الخلفي فقط.
+## 3. إعداد Supabase PostgreSQL
+1. افتح **SQL Editor** في مشروع Supabase ونفّذ [supabase/schema.sql](supabase/schema.sql) بالكامل.
+2. من **Project Settings -> API** انسخ `Project URL` (`SUPABASE_URL`) و`service_role` key (`SUPABASE_SERVICE_ROLE_KEY`).
+3. ضع المفاتيح في `deployment/.env` فقط (ممنوع وضع `service_role` في `frontend/` أو المتصفح).
 
 ---
 
-## 4. إعداد متغيرات البيئة وتشغيل النظام
-1. انسخ `deployment/.env.example` إلى `deployment/.env` وعدّل القيم المطلوبة:
-   - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
-   - `TOKEN_SECRET` (64 حرفاً عشوائياً)
-   - `DEFAULT_ADMIN_PASSWORD` (كلمة مرور قوية)
-   - `MIKROTIK_MODE=rest`, `MIKROTIK_HOST=192.168.20.1`, `MIKROTIK_API_PASSWORD`
-   - `GUEST_PORTAL_ORIGIN` (النطاق الحقيقي للشركة) و`GUEST_PROXY_BIND_IP`
-2. التشغيل المباشر على Windows:
-   - شغّل `start-windows.bat` (أو عبر Docker: `cd deployment && docker compose up -d`).
-3. التحقق من اتصال Backend وSupabase:
+## 4. التشغيل والتحقق (Windows USB أو Docker)
+1. انسخ `deployment/.env.example` إلى `deployment/.env` واضبط القيم (بما فيها `GUEST_PROXY_BIND_IP` و`GUEST_PORTAL_ORIGIN` و`MIKROTIK_API_PASSWORD`).
+2. **التشغيل المباشر على Windows (حزمة USB):**
+   - شغّل `start-windows.bat` (يحمّل `deployment/.env` عبر `--env-file` ويربط `/api/*` عبر `API_BACKEND_URL=http://127.0.0.1:4000`).
+3. **التشغيل عبر Docker Compose (مع Nginx TLS):**
+   ```bash
+   cd deployment
+   docker compose up -d --build
+   docker compose ps   # تحقق من حالة (healthy) لـ backend وfrontend
+   ```
+4. **التحقق من صحة Backend وSupabase:**
    ```bash
    curl http://127.0.0.1:4000/api/health
    ```
-   يجب أن يعيد: `{"ok":true,"database":"supabase-https",...}`.
-4. الإيقاف: إغلاق نافذتي التشغيل (أو `docker compose down`).
+   الاستجابة المتوقعة: `{"ok":true,"database":"supabase-https",...}`.
 
 ---
 
-## 5. خطوات MikroTik (منفذ `ether10` فقط)
-1. ارفع `routeros/preflight.rsc` ونفّذ `/import preflight.rsc` للتأكد من عدم وجود تعارض على `ether10`.
+## 5. النشر على MikroTik (منفذ `ether10` فقط)
+1. نفّذ `/import preflight.rsc` وتأكد من عدم وجود تعارض Bridge أو IP على `ether10`.
 2. انسخ محتويات `hotspot/` إلى مجلد `hotspot` على MikroTik.
-3. عدّل `apiPassword`, `portalDomain`, `backendServerIp` داخل `routeros/deploy.rsc` ثم نفّذ `/import deploy.rsc`.
-4. نفّذ `/import verify.rsc` للتحقق، وعند أي مشكلة نفّذ `/import rollback.rsc`.
+3. حدّث `apiPassword` و`portalDomain` و`backendServerIp` داخل `routeros/deploy.rsc` ثم نفّذ `/import deploy.rsc`.
+4. نفّذ `/import verify.rsc`، وعند الحاجة للتراجع الآمن نفّذ `/import rollback.rsc`.

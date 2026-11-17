@@ -6,7 +6,11 @@ import type {
   SessionStatus,
   UserRecord,
 } from '../types/index.js';
-import type { ActivatedUserResult, ClaimFreeQuotaResult, DatabaseClient } from './client.js';
+import type {
+  CommitFreeSessionResult,
+  CommitUserSessionResult,
+  DatabaseClient,
+} from './client.js';
 
 export class SupabaseDatabaseClient implements DatabaseClient {
   private readonly client: SupabaseClient;
@@ -106,15 +110,6 @@ export class SupabaseDatabaseClient implements DatabaseClient {
     return (data as UserRecord | null) ?? null;
   }
 
-  async activateUserOnFirstLogin(userId: string): Promise<ActivatedUserResult | null> {
-    const { data, error } = await this.client.rpc('activate_user_on_first_login', {
-      p_user_id: userId,
-    });
-    if (error) throw new Error(error.message);
-    const rows = data as ActivatedUserResult[] | null;
-    return rows && rows.length > 0 ? rows[0] : null;
-  }
-
   async listFreeQuotas(): Promise<FreeQuotaRecord[]> {
     const { data, error } = await this.client
       .from('free_quotas')
@@ -134,27 +129,48 @@ export class SupabaseDatabaseClient implements DatabaseClient {
     return (data as FreeQuotaRecord | null) ?? null;
   }
 
-  async claimFreeQuota(macAddress: string, durationSeconds: number): Promise<ClaimFreeQuotaResult> {
-    const { data, error } = await this.client.rpc('claim_free_quota', {
-      p_mac: macAddress.toUpperCase(),
-      p_duration_seconds: durationSeconds,
+  async commitFreeSession(input: {
+    macAddress: string;
+    ipAddress: string;
+    hotspotUsername: string;
+    hotspotProfile: string;
+    durationSeconds: number;
+  }): Promise<CommitFreeSessionResult> {
+    const { data, error } = await this.client.rpc('commit_free_session', {
+      p_mac: input.macAddress.toUpperCase(),
+      p_ip: input.ipAddress,
+      p_hs_user: input.hotspotUsername,
+      p_hs_profile: input.hotspotProfile,
+      p_duration_seconds: input.durationSeconds,
     });
     if (error) throw new Error(error.message);
-    const rows = data as ClaimFreeQuotaResult[] | null;
+    const rows = data as CommitFreeSessionResult[] | null;
     if (!rows || rows.length === 0) {
-      throw new Error('claim_free_quota returned empty result');
+      throw new Error('commit_free_session returned empty result');
     }
     return rows[0];
   }
 
-  async createSession(input: Omit<SessionRecord, 'id' | 'created_at'>): Promise<SessionRecord> {
-    const { data, error } = await this.client
-      .from('sessions')
-      .insert(input)
-      .select('*')
-      .single();
+  async commitUserSession(input: {
+    userId: string;
+    macAddress: string;
+    ipAddress: string;
+    hotspotUsername: string;
+    hotspotProfile: string;
+  }): Promise<CommitUserSessionResult> {
+    const { data, error } = await this.client.rpc('commit_user_session', {
+      p_user_id: input.userId,
+      p_mac: input.macAddress.toUpperCase(),
+      p_ip: input.ipAddress,
+      p_hs_user: input.hotspotUsername,
+      p_hs_profile: input.hotspotProfile,
+    });
     if (error) throw new Error(error.message);
-    return data as SessionRecord;
+    const rows = data as CommitUserSessionResult[] | null;
+    if (!rows || rows.length === 0) {
+      throw new Error('commit_user_session returned empty result');
+    }
+    return rows[0];
   }
 
   async getActiveSessionByMac(macAddress: string): Promise<SessionRecord | null> {

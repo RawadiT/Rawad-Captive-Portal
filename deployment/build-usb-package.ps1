@@ -1,4 +1,4 @@
-# Builds a lean, production-only USB transfer package in ./usb-package
+﻿# Builds a lean, production-only USB transfer package in ./usb-package
 $ErrorActionPreference = "Stop"
 $RootDir = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $OutDir = Join-Path $RootDir "usb-package"
@@ -23,19 +23,26 @@ Copy-Item -Recurse -Force (Join-Path $RootDir "frontend\.next\standalone\*") $Fe
 Copy-Item -Recurse -Force (Join-Path $RootDir "frontend\.next\static") "$FeOut\.next\static"
 Copy-Item -Recurse -Force (Join-Path $RootDir "frontend\public") "$FeOut\public"
 
-# 3. Supabase SQL, RouterOS scripts, HotSpot files, Deployment & Instructions
+# 3. Supabase SQL, RouterOS scripts, HotSpot files, Deployment (NO secrets!) & Instructions
 Copy-Item -Recurse -Force (Join-Path $RootDir "supabase") (Join-Path $OutDir "supabase")
 Copy-Item -Recurse -Force (Join-Path $RootDir "routeros") (Join-Path $OutDir "routeros")
 Copy-Item -Recurse -Force (Join-Path $RootDir "hotspot") (Join-Path $OutDir "hotspot")
 Copy-Item -Recurse -Force (Join-Path $RootDir "deployment") (Join-Path $OutDir "deployment")
+Remove-Item -Force (Join-Path $OutDir "deployment\.env") -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force (Join-Path $OutDir "deployment\tls\certs") -ErrorAction SilentlyContinue
 Copy-Item -Force (Join-Path $RootDir "DEPLOYMENT.md") $OutDir
 
 # 4. Create start scripts inside USB package
 @"
 @echo off
+if not exist "%~dp0deployment\.env" (
+  echo [ERROR] deployment\.env not found! Copy deployment\.env.example to deployment\.env and configure Supabase and MikroTik settings first.
+  pause
+  exit /b 1
+)
 echo Starting Rawad Tech Captive Portal...
-start "Rawad Backend" cmd /k "cd /d %~dp0backend && node dist/api/server.js"
-start "Rawad Frontend" cmd /k "cd /d %~dp0frontend && set PORT=3000 && node server.js"
+start "Rawad Backend" cmd /k "cd /d %~dp0backend && node --env-file=..\deployment\.env dist/api/server.js"
+start "Rawad Frontend" cmd /k "cd /d %~dp0frontend && set PORT=3000 && set API_BACKEND_URL=http://127.0.0.1:4000 && node server.js"
 "@ | Set-Content (Join-Path $OutDir "start-windows.bat") -Encoding ASCII
 
 $sizeBytes = (Get-ChildItem -Path $OutDir -Recurse -File | Measure-Object -Property Length -Sum).Sum
