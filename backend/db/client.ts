@@ -85,6 +85,10 @@ export interface DatabaseClient {
 
   renewProvisioningLease(sessionId: string, extendSeconds?: number): Promise<boolean>;
 
+  tryAcquireMonitorLock(lockName: string, ownerId: string, leaseSeconds?: number): Promise<boolean>;
+
+  releaseMonitorLock(lockName: string, ownerId: string): Promise<void>;
+
   // Sessions
   getActiveSessionByMac(macAddress: string): Promise<SessionRecord | null>;
   listActiveSessions(): Promise<SessionRecord[]>;

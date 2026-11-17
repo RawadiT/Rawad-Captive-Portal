@@ -221,6 +221,24 @@ export class SupabaseDatabaseClient implements DatabaseClient {
     return Boolean(data);
   }
 
+  async tryAcquireMonitorLock(lockName: string, ownerId: string, leaseSeconds = 30): Promise<boolean> {
+    const { data, error } = await this.client.rpc('try_acquire_monitor_lock', {
+      p_lock_name: lockName,
+      p_owner_id: ownerId,
+      p_lease_seconds: leaseSeconds,
+    });
+    if (error) throw new Error(error.message);
+    return Boolean(data);
+  }
+
+  async releaseMonitorLock(lockName: string, ownerId: string): Promise<void> {
+    const { error } = await this.client.rpc('release_monitor_lock', {
+      p_lock_name: lockName,
+      p_owner_id: ownerId,
+    });
+    if (error) throw new Error(error.message);
+  }
+
   async getActiveSessionByMac(macAddress: string): Promise<SessionRecord | null> {
     const { data, error } = await this.client
       .from('sessions')

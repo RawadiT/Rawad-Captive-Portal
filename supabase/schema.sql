@@ -87,6 +87,14 @@ CREATE UNIQUE INDEX idx_sessions_one_active_user
   ON public.sessions (user_id)
   WHERE status IN ('provisioning', 'active', 'revocation_pending') AND session_type = 'user';
 
+-- 5. Cross-process SessionMonitor lease locks (PostgreSQL-backed, crash-safe)
+CREATE TABLE IF NOT EXISTS public.monitor_locks (
+  lock_name TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL,
+  lease_expires_at TIMESTAMPTZ NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- ==============================================================================
 -- ROW LEVEL SECURITY & PRIVILEGE HARDENING
 -- ==============================================================================
@@ -94,9 +102,10 @@ ALTER TABLE public.admins ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.free_quotas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.monitor_locks ENABLE ROW LEVEL SECURITY;
 
-REVOKE ALL ON TABLE public.admins, public.users, public.free_quotas, public.sessions FROM PUBLIC, anon, authenticated;
-GRANT ALL ON TABLE public.admins, public.users, public.free_quotas, public.sessions TO service_role;
+REVOKE ALL ON TABLE public.admins, public.users, public.free_quotas, public.sessions, public.monitor_locks FROM PUBLIC, anon, authenticated;
+GRANT ALL ON TABLE public.admins, public.users, public.free_quotas, public.sessions, public.monitor_locks TO service_role;
 
 -- ==============================================================================
 -- LEGACY RPC PRIVILEGE REVOCATION & SAFE CLEANUP (IDEMPOTENT)
@@ -458,17 +467,74 @@ AS $$
 DECLARE
   v_count INTEGER;
 BEGIN
-  WITH reclaimed AS (
-    UPDATE public.sessions
-    SET status = 'revocation_pending', lease_expires_at = NULL
+  WITH expired_rows AS (
+    SELECT id FROM public.sessions
     WHERE status = 'provisioning'
       AND lease_expires_at IS NOT NULL
       AND lease_expires_at < clock_timestamp()
-    RETURNING id
+    FOR UPDATE SKIP LOCKED
+  ),
+  reclaimed AS (
+    UPDATE public.sessions s
+    SET status = 'revocation_pending', lease_expires_at = NULL
+    FROM expired_rows e
+    WHERE s.id = e.id
+    RETURNING s.id
   )
   SELECT COUNT(*)::INTEGER INTO v_count FROM reclaimed;
 
   RETURN COALESCE(v_count, 0);
+END;
+$$;
+
+-- Acquire or renew a cross-process SessionMonitor lease lock in PostgreSQL
+CREATE OR REPLACE FUNCTION public.try_acquire_monitor_lock(
+  p_lock_name TEXT,
+  p_owner_id TEXT,
+  p_lease_seconds INTEGER DEFAULT 30
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_now TIMESTAMPTZ := clock_timestamp();
+BEGIN
+  IF TRIM(COALESCE(p_lock_name, '')) = '' OR TRIM(COALESCE(p_owner_id, '')) = '' THEN
+    RAISE EXCEPTION 'Lock name and owner ID are required';
+  END IF;
+  IF p_lease_seconds IS NULL OR p_lease_seconds < 5 OR p_lease_seconds > 300 THEN
+    RAISE EXCEPTION 'Invalid monitor lock lease seconds';
+  END IF;
+
+  INSERT INTO public.monitor_locks (lock_name, owner_id, lease_expires_at, updated_at)
+  VALUES (TRIM(p_lock_name), TRIM(p_owner_id), v_now + make_interval(secs => p_lease_seconds), v_now)
+  ON CONFLICT (lock_name) DO UPDATE
+    SET owner_id = EXCLUDED.owner_id,
+        lease_expires_at = EXCLUDED.lease_expires_at,
+        updated_at = EXCLUDED.updated_at
+    WHERE public.monitor_locks.owner_id = EXCLUDED.owner_id
+       OR public.monitor_locks.lease_expires_at < v_now;
+
+  RETURN FOUND;
+END;
+$$;
+
+-- Release a cross-process SessionMonitor lease lock owned by this instance
+CREATE OR REPLACE FUNCTION public.release_monitor_lock(
+  p_lock_name TEXT,
+  p_owner_id TEXT
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  DELETE FROM public.monitor_locks
+  WHERE lock_name = TRIM(COALESCE(p_lock_name, ''))
+    AND owner_id = TRIM(COALESCE(p_owner_id, ''));
 END;
 $$;
 
@@ -525,3 +591,9 @@ GRANT EXECUTE ON FUNCTION public.reclaim_expired_provisioning_leases() TO servic
 
 REVOKE ALL ON FUNCTION public.renew_provisioning_lease(UUID, INTEGER) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.renew_provisioning_lease(UUID, INTEGER) TO service_role;
+
+REVOKE ALL ON FUNCTION public.try_acquire_monitor_lock(TEXT, TEXT, INTEGER) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.try_acquire_monitor_lock(TEXT, TEXT, INTEGER) TO service_role;
+
+REVOKE ALL ON FUNCTION public.release_monitor_lock(TEXT, TEXT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.release_monitor_lock(TEXT, TEXT) TO service_role;

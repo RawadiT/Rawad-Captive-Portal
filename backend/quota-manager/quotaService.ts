@@ -13,7 +13,16 @@ import { normalizeMac } from './macUtils.js';
 
 export interface QuotaServiceConfig {
   freeQuotaSeconds: number;
+  leaseRenewIntervalMs?: number;
+  leaseExtendSeconds?: number;
   nowProvider?: () => Date;
+}
+
+export class LeaseLostError extends Error {
+  constructor(message = 'فقدت الجلسة صلاحية الحجز المؤقت أثناء التفعيل') {
+    super(message);
+    this.name = 'LeaseLostError';
+  }
 }
 
 function toPublicUser(u: UserRecord, nowMs: number): PublicUser {
@@ -48,16 +57,117 @@ export class QuotaService {
   }
 
   private async withLeaseRenewal<T>(sessionId: string, fn: () => Promise<T>): Promise<T> {
-    const timer = setInterval(() => {
-      void this.db.renewProvisioningLease(sessionId, 60).catch((err) => {
-        console.error('[LeaseRenewal] failed:', err instanceof Error ? err.message : err);
-      });
-    }, 45_000);
-    timer.unref();
+    const intervalMs = this.cfg.leaseRenewIntervalMs ?? 30_000;
+    const extendSeconds = this.cfg.leaseExtendSeconds ?? 90;
+
+    let stopped = false;
+    let timer: NodeJS.Timeout | null = null;
+    let inFlightRenewal: Promise<void> | null = null;
+    let rejectLeaseLost!: (err: Error) => void;
+
+    const leaseLostPromise = new Promise<never>((_resolve, reject) => {
+      rejectLeaseLost = reject;
+    });
+    // Prevent unhandled rejection if fn() finishes first
+    leaseLostPromise.catch(() => {});
+
+    const runOneRenewal = async (): Promise<void> => {
+      let lastErr: unknown = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (stopped) return;
+        try {
+          const ok = await this.db.renewProvisioningLease(sessionId, extendSeconds);
+          if (!ok) {
+            throw new LeaseLostError('Provisioning lease is no longer valid or session was reclaimed');
+          }
+          return;
+        } catch (err) {
+          if (err instanceof LeaseLostError) throw err;
+          lastErr = err;
+          if (attempt === 0 && !stopped) {
+            await new Promise((r) => setTimeout(r, 200));
+          }
+        }
+      }
+      const msg = lastErr instanceof Error ? lastErr.message : String(lastErr);
+      throw new LeaseLostError(`Lease renewal failed: ${msg}`);
+    };
+
+    const scheduleNext = (): void => {
+      if (stopped) return;
+      timer = setTimeout(() => {
+        if (stopped) return;
+        inFlightRenewal = runOneRenewal()
+          .then(() => {
+            inFlightRenewal = null;
+            scheduleNext();
+          })
+          .catch((err) => {
+            inFlightRenewal = null;
+            if (!stopped) {
+              const leaseErr = err instanceof LeaseLostError ? err : new LeaseLostError(String(err));
+              console.error('[LeaseRenewal] aborting provisioning:', leaseErr.message);
+              rejectLeaseLost(leaseErr);
+            }
+          });
+      }, intervalMs);
+      timer.unref();
+    };
+
+    scheduleNext();
+
     try {
-      return await fn();
+      return await Promise.race([fn(), leaseLostPromise]);
     } finally {
-      clearInterval(timer);
+      stopped = true;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      const pending = inFlightRenewal as Promise<void> | null;
+      if (pending) {
+        await pending.catch(() => {});
+      }
+    }
+  }
+
+  private async updateSessionStatusWithRetry(
+    sessionId: string,
+    status: 'disconnected' | 'expired',
+    attempts = 3
+  ): Promise<void> {
+    let lastErr: unknown;
+    for (let i = 0; i < attempts; i++) {
+      try {
+        await this.db.updateSessionStatus(sessionId, status);
+        return;
+      } catch (err) {
+        lastErr = err;
+        if (i < attempts - 1) {
+          await new Promise((r) => setTimeout(r, 150 * (i + 1)));
+        }
+      }
+    }
+    throw lastErr;
+  }
+
+  private async compensateFailedProvisioning(
+    sessionId: string,
+    username: string,
+    macAddress: string,
+    profile: string
+  ): Promise<void> {
+    try {
+      await this.revokeStrictWithRetry(username, macAddress, profile);
+      await this.db.abortProvisioning(sessionId).catch(() => {});
+      await this.updateSessionStatusWithRetry(sessionId, 'disconnected').catch((e) =>
+        console.error('[Recovery] Failed to mark compensated session disconnected:', e)
+      );
+    } catch (revErr) {
+      console.error('[CRITICAL] Compensating MikroTik revoke failed; marking revocation_pending:', revErr);
+      await this.db.markRevocationPending(sessionId).catch((e) =>
+        console.error('[CRITICAL] markRevocationPending failed:', e)
+      );
     }
   }
 
@@ -186,24 +296,14 @@ export class QuotaService {
         })
       );
     } catch (err) {
-      await this.db.abortProvisioning(begin.session_id).catch((e) =>
-        console.error('[Recovery] abortProvisioning failed:', e)
-      );
+      await this.compensateFailedProvisioning(begin.session_id, hotspotUsername, mac, hotspotProfile);
       throw err;
     }
 
     try {
       const finalized = await this.db.finalizeFreeSession(begin.session_id, this.cfg.freeQuotaSeconds);
       if (!finalized.allowed || finalized.remaining_seconds <= 0) {
-        try {
-          await this.revokeStrictWithRetry(hotspotUsername, mac, hotspotProfile);
-          await this.db.abortProvisioning(begin.session_id);
-        } catch (revErr) {
-          await this.db.markRevocationPending(begin.session_id).catch((e) =>
-            console.error('[CRITICAL] markRevocationPending failed:', e)
-          );
-          throw revErr;
-        }
+        await this.compensateFailedProvisioning(begin.session_id, hotspotUsername, mac, hotspotProfile);
         throw new ForbiddenError('تم استهلاك الحصة المجانية (30 دقيقة) لهذا الجهاز مسبقاً.');
       }
 
@@ -228,15 +328,7 @@ export class QuotaService {
       };
     } catch (err) {
       if (!(err instanceof ForbiddenError)) {
-        try {
-          await this.revokeStrictWithRetry(hotspotUsername, mac, hotspotProfile);
-          await this.db.abortProvisioning(begin.session_id);
-        } catch (revErr) {
-          console.error('[CRITICAL] Compensating MikroTik revoke failed; marking revocation_pending:', revErr);
-          await this.db.markRevocationPending(begin.session_id).catch((e) =>
-            console.error('[CRITICAL] markRevocationPending failed:', e)
-          );
-        }
+        await this.compensateFailedProvisioning(begin.session_id, hotspotUsername, mac, hotspotProfile);
       }
       throw err;
     }
@@ -274,7 +366,7 @@ export class QuotaService {
 
     for (const old of toClose.values()) {
       await this.revokeStrictWithRetry(old.hotspot_username, old.mac_address, old.hotspot_profile);
-      await this.db.updateSessionStatus(old.id, 'disconnected');
+      await this.updateSessionStatusWithRetry(old.id, 'disconnected');
     }
 
     const hotspotUsername = `usr-${user.username}`;
@@ -306,24 +398,14 @@ export class QuotaService {
         })
       );
     } catch (err) {
-      await this.db.abortProvisioning(begin.session_id).catch((e) =>
-        console.error('[Recovery] abortProvisioning failed:', e)
-      );
+      await this.compensateFailedProvisioning(begin.session_id, hotspotUsername, mac, hotspotProfile);
       throw err;
     }
 
     try {
       const finalized = await this.db.finalizeUserSession(begin.session_id);
       if (!finalized.allowed || !finalized.started_at || !finalized.expires_at || finalized.remaining_seconds <= 0) {
-        try {
-          await this.revokeStrictWithRetry(hotspotUsername, mac, hotspotProfile);
-          await this.db.abortProvisioning(begin.session_id);
-        } catch (revErr) {
-          await this.db.markRevocationPending(begin.session_id).catch((e) =>
-            console.error('[CRITICAL] markRevocationPending failed:', e)
-          );
-          throw revErr;
-        }
+        await this.compensateFailedProvisioning(begin.session_id, hotspotUsername, mac, hotspotProfile);
         throw new ForbiddenError('انتهت صلاحية هذا الحساب أو تم تعطيله');
       }
 
@@ -354,15 +436,7 @@ export class QuotaService {
       };
     } catch (err) {
       if (!(err instanceof ForbiddenError)) {
-        try {
-          await this.revokeStrictWithRetry(hotspotUsername, mac, hotspotProfile);
-          await this.db.abortProvisioning(begin.session_id);
-        } catch (revErr) {
-          console.error('[CRITICAL] Compensating MikroTik revoke failed; marking revocation_pending:', revErr);
-          await this.db.markRevocationPending(begin.session_id).catch((e) =>
-            console.error('[CRITICAL] markRevocationPending failed:', e)
-          );
-        }
+        await this.compensateFailedProvisioning(begin.session_id, hotspotUsername, mac, hotspotProfile);
       }
       throw err;
     }
@@ -405,7 +479,7 @@ export class QuotaService {
       const actives = await this.db.listActiveSessionsByUserId(userId);
       for (const s of actives) {
         await this.revokeStrictWithRetry(s.hotspot_username, s.mac_address, s.hotspot_profile);
-        await this.db.updateSessionStatus(s.id, 'disconnected');
+        await this.updateSessionStatusWithRetry(s.id, 'disconnected');
       }
     }
 
