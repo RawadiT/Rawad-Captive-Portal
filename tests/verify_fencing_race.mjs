@@ -15,6 +15,10 @@ import path from 'node:path';
 
 const dbUrl = process.env.TEST_DATABASE_URL?.trim();
 if (!dbUrl) {
+  if (process.env.CI === 'true' || process.env.REQUIRE_TEST_DB === 'true') {
+    console.error('ERROR: TEST_DATABASE_URL is required in CI / strict mode. SKIPPED is not allowed.');
+    process.exit(1);
+  }
   console.log('SKIPPED: TEST_DATABASE_URL is not set. Real 2-connection PostgreSQL test was NOT executed.');
   process.exit(0);
 }
