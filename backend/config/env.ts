@@ -5,7 +5,6 @@ export interface AppConfig {
   supabaseUrl: string;
   supabaseServiceRoleKey: string;
   tokenSecret: string;
-  mikrotikMode: 'mock' | 'rest';
   mikrotikHost: string;
   mikrotikPort: number;
   mikrotikUsername: string;
@@ -56,13 +55,11 @@ export function validateProductionSecrets(cfg: AppConfig): void {
   if (process.env.GUEST_PROXY_BIND_IP === '0.0.0.0') {
     throw new Error('FATAL: GUEST_PROXY_BIND_IP must not be 0.0.0.0 in production');
   }
-  if (cfg.mikrotikMode === 'rest') {
-    if (!cfg.mikrotikPassword || INSECURE_PLACEHOLDERS.has(cfg.mikrotikPassword)) {
-      throw new Error('FATAL: MIKROTIK_API_PASSWORD must be set in production');
-    }
-    if (!cfg.mikrotikTlsRejectUnauthorized) {
-      throw new Error('FATAL: MIKROTIK_TLS_VERIFY must be true in production');
-    }
+  if (!cfg.mikrotikPassword || INSECURE_PLACEHOLDERS.has(cfg.mikrotikPassword)) {
+    throw new Error('FATAL: MIKROTIK_API_PASSWORD must be set in production');
+  }
+  if (!cfg.mikrotikTlsRejectUnauthorized) {
+    throw new Error('FATAL: MIKROTIK_TLS_VERIFY must be true in production');
   }
 }
 
@@ -77,7 +74,6 @@ export function loadConfig(): AppConfig {
     supabaseUrl: process.env.SUPABASE_URL || '',
     supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
     tokenSecret: process.env.TOKEN_SECRET || (isProd ? '' : 'rawad-tech-local-dev-secret-change-in-production'),
-    mikrotikMode: process.env.MIKROTIK_MODE === 'rest' ? 'rest' : 'mock',
     mikrotikHost: process.env.MIKROTIK_HOST || '192.168.20.1',
     mikrotikPort: Number(process.env.MIKROTIK_REST_PORT || 443),
     mikrotikUsername: process.env.MIKROTIK_API_USER || 'rawad-api',

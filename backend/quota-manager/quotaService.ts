@@ -141,6 +141,18 @@ export class QuotaService {
     const mac = normalizeMac(input.macAddress);
 
     return this.withLock(`mac:${mac}`, async () => {
+      const existingActive = await this.db.getActiveSessionByMac(mac);
+      if (existingActive) {
+        const activeOnRouter = await this.mikrotik.listActiveSessions().catch(() => []);
+        const stillOnRouter = activeOnRouter.some(
+          (s) => s.macAddress.toUpperCase() === mac && s.user === existingActive.hotspot_username
+        );
+        if (stillOnRouter) {
+          throw new ConflictError('لديك جلسة مجانية نشطة حالياً، لا يمكن منح حصة ثانية.');
+        }
+        await this.db.updateSessionStatus(existingActive.id, 'disconnected');
+      }
+
       const claim = await this.db.claimFreeQuota(mac, this.cfg.freeQuotaSeconds);
       if (!claim.allowed || claim.remaining_seconds <= 0) {
         throw new ForbiddenError('تم استهلاك الحصة المجانية (30 دقيقة) لهذا الجهاز مسبقاً.');
@@ -209,17 +221,22 @@ export class QuotaService {
         throw new ForbiddenError('انتهت صلاحية هذا الحساب');
       }
 
-      // Close any existing active session for this MAC
-      const existingActive = await this.db.getActiveSessionByMac(mac);
-      if (existingActive) {
+      // Close any existing active session for this MAC OR this user account (single active session per account)
+      const activeByMac = await this.db.getActiveSessionByMac(mac);
+      const activeByUser = await this.db.listActiveSessionsByUserId(user.id);
+      const toClose = new Map<string, SessionRecord>();
+      if (activeByMac) toClose.set(activeByMac.id, activeByMac);
+      for (const s of activeByUser) toClose.set(s.id, s);
+
+      for (const old of toClose.values()) {
         await this.mikrotik
           .revokeHotspotAccess({
-            username: existingActive.hotspot_username,
-            macAddress: existingActive.mac_address,
-            profile: existingActive.hotspot_profile,
+            username: old.hotspot_username,
+            macAddress: old.mac_address,
+            profile: old.hotspot_profile,
           })
           .catch(() => {});
-        await this.db.updateSessionStatus(existingActive.id, 'disconnected');
+        await this.db.updateSessionStatus(old.id, 'disconnected');
       }
 
       const hotspotUsername = `usr-${user.username}`;
