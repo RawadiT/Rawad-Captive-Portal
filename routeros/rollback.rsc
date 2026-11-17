@@ -49,11 +49,62 @@
 :global rawadCreatedV6Fwd; :global rawadIdV6Fwd
 :global rawadCreatedV6In; :global rawadIdV6In
 
-:if ([:len [/system script find where name="rawad-portal-state" && comment="rawad-guest-portal-state"]] > 0) do={
-    /system script run rawad-portal-state
-} else={
-    :error "ABORT: rawad-portal-state with expected comment not found (or replaced manually). Refusing unsafe rollback."
+:local anchorIds [/system script find where name="rawad-portal-anchor" && comment="rawad-guest-portal-anchor"]
+:if ([:len $anchorIds] != 1) do={
+    :error "ABORT: rawad-portal-anchor missing or duplicated. Cannot verify state script ownership before execution."
 }
+:local anchorSid [:pick $anchorIds 0]
+:local anchorSrc [/system script get $anchorSid source]
+
+:local pId [:find $anchorSrc "id="]
+:local pLen [:find $anchorSrc ";len="]
+:local pH1 [:find $anchorSrc ";h1="]
+:local pH2 [:find $anchorSrc ";h2="]
+:local pEnd [:find $anchorSrc ";" $pH2]
+:if ([:typeof $pId] != "num" || [:typeof $pLen] != "num" || [:typeof $pH1] != "num" || [:typeof $pH2] != "num" || [:typeof $pEnd] != "num") do={
+    :error "ABORT: rawad-portal-anchor format invalid. Refusing unsafe rollback."
+}
+:local expId [:pick $anchorSrc ($pId + 3) $pLen]
+:local expLen [:tonum [:pick $anchorSrc ($pLen + 5) $pH1]]
+:local expH1 [:tonum [:pick $anchorSrc ($pH1 + 4) $pH2]]
+:local expH2 [:tonum [:pick $anchorSrc ($pH2 + 4) $pEnd]]
+
+:local stateIds [/system script find where name="rawad-portal-state" && comment="rawad-guest-portal-state"]
+:if ([:len $stateIds] != 1) do={
+    :error "ABORT: rawad-portal-state missing or duplicated. Refusing unsafe rollback."
+}
+:local stateSid [:pick $stateIds 0]
+:if ([:tostr $stateSid] != $expId) do={
+    :error "ABORT: rawad-portal-state .id mismatch (script was replaced manually). Refusing to execute or rollback."
+}
+
+:local curSrc [/system script get $stateSid source]
+:local expectedTail ("\n:global rawadStateBodyLen " . $expLen . ";\n:global rawadStateH1 " . $expH1 . ";\n:global rawadStateH2 " . $expH2 . ";")
+:if ([:len $curSrc] != ($expLen + [:len $expectedTail]) || [:find $curSrc $expectedTail] != $expLen) do={
+    :error "ABORT: rawad-portal-state length or footer mismatch (modified manually). Refusing to execute."
+}
+:if ([:typeof [:find $curSrc "["]] = "num" || [:typeof [:find $curSrc "]"]] = "num" || [:typeof [:find $curSrc "/"]] = "num") do={
+    :if ([:typeof [:find $curSrc "/32"]] = "nil" && [:typeof [:find $curSrc "/24"]] = "nil" && [:typeof [:find $curSrc "/16"]] = "nil" && [:typeof [:find $curSrc "/12"]] = "nil" && [:typeof [:find $curSrc "/8"]] = "nil" && [:typeof [:find $curSrc "Asia/Baghdad"]] = "nil" && [:typeof [:find $curSrc "America/"]] = "nil" && [:typeof [:find $curSrc "Europe/"]] = "nil") do={
+        :error "ABORT: rawad-portal-state contains unexpected characters. Refusing to execute."
+    }
+}
+
+:local stateBody [:pick $curSrc 0 $expLen]
+:local ascii " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\n\r\t"
+:local actH1 5381
+:local actH2 216613626
+:for i from=0 to=($expLen - 1) do={
+    :local ch [:pick $stateBody $i ($i + 1)]
+    :local code [:find $ascii $ch]
+    :if ([:typeof $code] != "num") do={ :set code 127 }
+    :set actH1 ((($actH1 * 131) + $code + $i) % 2147483647)
+    :set actH2 ((($actH2 * 65599) + ($code * ($i + 1))) % 2147483647)
+}
+:if ($actH1 != $expH1 || $actH2 != $expH2) do={
+    :error "ABORT: rawad-portal-state digest mismatch (content modified even with same length). Refusing to execute."
+}
+
+/system script run $stateSid
 
 # 1. Remove each firewall rule individually ONLY if created by deploy.rsc, matching exact .id AND unmodified properties
 :if ($rawadCreatedFwPriv3 = true && $rawadIdFwPriv3 != "") do={
@@ -197,15 +248,8 @@
     }
 }
 
-# 6. Remove rawad-portal-state ONLY if exact .id AND unmodified body/length match
-:if ([:typeof $rawadIdStateScript] = "str" && $rawadIdStateScript != "" && [:typeof $rawadStateBodyLen] = "num" && $rawadStateBodyLen > 0) do={
-    :if ([:len [/system script find where .id=$rawadIdStateScript && name="rawad-portal-state" && comment="rawad-guest-portal-state"]] > 0) do={
-        :local curSrc [/system script get $rawadIdStateScript source]
-        :local expectedTail ("\n:global rawadStateBodyLen " . $rawadStateBodyLen . ";")
-        :if ([:len $curSrc] = ($rawadStateBodyLen + [:len $expectedTail]) && [:find $curSrc $expectedTail] = $rawadStateBodyLen) do={
-            /system script remove $rawadIdStateScript
-        }
-    }
-}
+# 6. Remove verified rawad-portal-state and rawad-portal-anchor by exact .id
+/system script remove $stateSid
+/system script remove $anchorSid
 
 :put "=== ROLLBACK COMPLETE ==="

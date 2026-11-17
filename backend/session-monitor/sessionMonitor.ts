@@ -73,16 +73,30 @@ export class SessionMonitor {
     }
   }
 
-  private async updateSessionStatusWithRetry(
+  private async updateSessionStatusFencedWithRetry(
     sessionId: string,
     status: 'expired' | 'disconnected',
+    fenceToken: number,
+    isLockLost: () => boolean,
+    onLockLost: () => void,
     attempts = 3
-  ): Promise<void> {
+  ): Promise<boolean> {
     let lastErr: unknown;
     for (let i = 0; i < attempts; i++) {
+      if (isLockLost()) return false;
       try {
-        await this.db.updateSessionStatus(sessionId, status);
-        return;
+        const ok = await this.db.fencedUpdateSessionStatus(
+          sessionId,
+          status,
+          'session_monitor_sync',
+          this.instanceId,
+          fenceToken
+        );
+        if (!ok) {
+          onLockLost();
+          return false;
+        }
+        return true;
       } catch (err) {
         lastErr = err;
         if (i < attempts - 1) {
@@ -95,8 +109,17 @@ export class SessionMonitor {
 
   private async revokeAndFinalizeSession(
     s: SessionRecord,
-    targetStatus: 'expired' | 'disconnected'
+    targetStatus: 'expired' | 'disconnected',
+    lockCtx?: {
+      fenceToken: number;
+      isLockLost: () => boolean;
+      onLockLost: () => void;
+      verifyLock: () => Promise<boolean>;
+    }
   ): Promise<boolean> {
+    if (lockCtx && !(await lockCtx.verifyLock())) {
+      return false;
+    }
     if (this.revokingSessionIds.has(s.id)) {
       return false; // Prevent duplicate concurrent revocations on the same session
     }
@@ -107,7 +130,16 @@ export class SessionMonitor {
         macAddress: s.mac_address,
         profile: s.hotspot_profile,
       });
-      await this.updateSessionStatusWithRetry(s.id, targetStatus);
+      if (lockCtx) {
+        return await this.updateSessionStatusFencedWithRetry(
+          s.id,
+          targetStatus,
+          lockCtx.fenceToken,
+          lockCtx.isLockLost,
+          lockCtx.onLockLost
+        );
+      }
+      await this.db.updateSessionStatus(s.id, targetStatus);
       return true;
     } finally {
       this.revokingSessionIds.delete(s.id);
@@ -125,12 +157,12 @@ export class SessionMonitor {
   }
 
   private async executeSyncSessions(): Promise<SyncSessionsResult> {
-    const acquired = await this.db.tryAcquireMonitorLock(
+    const lockRes = await this.db.tryAcquireMonitorLock(
       'session_monitor_sync',
       this.instanceId,
       this.lockLeaseSeconds
     );
-    if (!acquired) {
+    if (!lockRes.acquired) {
       return {
         skipped: true,
         reclaimedLeases: 0,
@@ -140,33 +172,71 @@ export class SessionMonitor {
       };
     }
 
+    const fenceToken = lockRes.fence_token;
     let lockLost = false;
     let lockStopped = false;
     let lockTimer: NodeJS.Timeout | null = null;
     let inFlightLockRenewal: Promise<void> | null = null;
+    let renewalSeq = 0;
+
+    const markLockLost = (): void => {
+      if (!lockLost) {
+        lockLost = true;
+        console.error('[SessionMonitor] Lost monitor lock or fence_token mismatch; aborting further mutations.');
+      }
+    };
+
+    const verifyLock = async (): Promise<boolean> => {
+      if (lockLost || lockStopped) return false;
+      try {
+        const res = await this.db.tryAcquireMonitorLock(
+          'session_monitor_sync',
+          this.instanceId,
+          this.lockLeaseSeconds
+        );
+        if (!res.acquired || res.fence_token !== fenceToken) {
+          markLockLost();
+          return false;
+        }
+        return true;
+      } catch {
+        markLockLost();
+        return false;
+      }
+    };
+
+    const lockCtx = {
+      fenceToken,
+      isLockLost: () => lockLost,
+      onLockLost: markLockLost,
+      verifyLock,
+    };
 
     const scheduleLockRenewal = (): void => {
       if (lockStopped || lockLost) return;
       lockTimer = setTimeout(() => {
         if (lockStopped || lockLost) return;
+        const seq = ++renewalSeq;
         inFlightLockRenewal = this.db
           .tryAcquireMonitorLock('session_monitor_sync', this.instanceId, this.lockLeaseSeconds)
-          .then((ok) => {
-            inFlightLockRenewal = null;
-            if (!ok) {
-              lockLost = true;
-              console.error('[SessionMonitor] Lost monitor lock during sync cycle; aborting further mutations.');
+          .then((res) => {
+            if (seq === renewalSeq) inFlightLockRenewal = null;
+            if (lockStopped || lockLost) return;
+            if (!res.acquired || res.fence_token !== fenceToken) {
+              markLockLost();
             } else {
               scheduleLockRenewal();
             }
           })
           .catch((err) => {
-            inFlightLockRenewal = null;
-            lockLost = true;
-            console.error(
-              '[SessionMonitor] Monitor lock renewal failed; aborting further mutations:',
-              err instanceof Error ? err.message : err
-            );
+            if (seq === renewalSeq) inFlightLockRenewal = null;
+            if (!lockStopped) {
+              console.error(
+                '[SessionMonitor] Monitor lock renewal failed; aborting further mutations:',
+                err instanceof Error ? err.message : err
+              );
+              markLockLost();
+            }
           });
       }, this.lockRenewIntervalMs);
       lockTimer.unref();
@@ -210,7 +280,7 @@ export class SessionMonitor {
       for (const p of pendingRevokes) {
         if (lockLost) break;
         try {
-          await this.revokeAndFinalizeSession(p, 'disconnected');
+          await this.revokeAndFinalizeSession(p, 'disconnected', lockCtx);
         } catch (err) {
           console.error(
             `[SessionMonitor] Retry revoke failed for revocation_pending '${p.hotspot_username}':`,
@@ -243,7 +313,7 @@ export class SessionMonitor {
 
         if (isExpired) {
           try {
-            const done = await this.revokeAndFinalizeSession(s, 'expired');
+            const done = await this.revokeAndFinalizeSession(s, 'expired', lockCtx);
             if (done) expiredCount++;
           } catch (err) {
             console.error(
@@ -253,8 +323,14 @@ export class SessionMonitor {
           }
         } else if (missingOnRouter) {
           try {
-            await this.updateSessionStatusWithRetry(s.id, 'disconnected');
-            disconnectedCount++;
+            const updated = await this.updateSessionStatusFencedWithRetry(
+              s.id,
+              'disconnected',
+              fenceToken,
+              () => lockLost,
+              markLockLost
+            );
+            if (updated) disconnectedCount++;
           } catch (err) {
             console.error(
               `[SessionMonitor] Failed to mark missing session '${s.hotspot_username}' disconnected (will retry):`,
@@ -268,7 +344,7 @@ export class SessionMonitor {
 
       if (mikrotikReachable && !lockLost) {
         for (const m of mikrotikActive) {
-          if (lockLost) break;
+          if (!(await verifyLock())) break;
           if (!m.user.startsWith('free-') && !m.user.startsWith('usr-')) continue;
           const key = `${m.user}|${m.macAddress.toUpperCase()}`;
           if (!validActiveKeys.has(key)) {

@@ -395,9 +395,23 @@
       ":global rawadCreatedV6Fwd " . $crV6Fwd . "; :global rawadIdV6Fwd \"" . $idV6Fwd . "\";\n" . \
       ":global rawadCreatedV6In " . $crV6In . "; :global rawadIdV6In \"" . $idV6In . "\";")
     :local stateBodyLen [:len $stateBody]
-    :local finalSrc ($stateBody . "\n:global rawadStateBodyLen " . $stateBodyLen . ";")
+    :local ascii " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\n\r\t"
+    :local h1 5381
+    :local h2 216613626
+    :for i from=0 to=($stateBodyLen - 1) do={
+        :local ch [:pick $stateBody $i ($i + 1)]
+        :local code [:find $ascii $ch]
+        :if ([:typeof $code] != "num") do={ :set code 127 }
+        :set h1 ((($h1 * 131) + $code + $i) % 2147483647)
+        :set h2 ((($h2 * 65599) + ($code * ($i + 1))) % 2147483647)
+    }
+    :local finalSrc ($stateBody . "\n:global rawadStateBodyLen " . $stateBodyLen . ";\n:global rawadStateH1 " . $h1 . ";\n:global rawadStateH2 " . $h2 . ";")
     :if ([:len [/system script find where .id=$idStateScript && name="rawad-portal-state" && comment="rawad-guest-portal-state"]] > 0) do={
         /system script set $idStateScript source=$finalSrc
+        :local anchorSrc ("id=" . [:tostr $idStateScript] . ";len=" . $stateBodyLen . ";h1=" . $h1 . ";h2=" . $h2 . ";")
+        :if ([:len [/system script find where name="rawad-portal-anchor"]] = 0) do={
+            /system script add name="rawad-portal-anchor" source=$anchorSrc comment="rawad-guest-portal-anchor"
+        }
     }
 }
 

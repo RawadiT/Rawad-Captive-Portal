@@ -1,9 +1,9 @@
-# TASKS.md — Sixth Audit Remediation
+# TASKS.md — Seventh Audit Remediation
 
-**Baseline Commit:** `de61fa5793d5cece616fb6c3fc036b09d879a385`
+**Baseline Commit:** `0883ebfafee1051b92ea334bc36486efa7ed35f7`
 
-- [x] **A6.1** Fix `QuotaService.withLeaseRenewal` late MikroTik completion race: wait up to `lateCompletionGraceMs` for in-flight `grantHotspotAccess` before compensating, and if still in flight, keep `revocation_pending` and trigger compensating revoke upon late completion.
-- [x] **A6.2** Add periodic `session_monitor_sync` lock renewal (`monitorLockRenewIntervalMs` / `monitorLockLeaseSeconds`) in `SessionMonitor` and abort further mutations if the lock is lost mid-cycle.
-- [x] **A6.3** Track `rawad-portal-state` exact `.id` (`rawadIdStateScript`) and body length (`rawadStateBodyLen`) in `deploy.rsc` / `rollback.rsc` so modified or replaced state scripts are never deleted.
-- [x] **A6.4** Record expected project-applied config values (`rawadSetDnsRemote`, `rawadSetWwwSsl*`, `rawadSetTz`, `rawadSetNtpEn`) and preserve manual post-deploy changes during rollback.
-- [x] **A6.5** Guard dependent resource removals (Pool, HotSpot Profile, DHCP Option, API Group) and isolate errors in `rollback.rsc`, then run all builds, Sixth Audit verification suite, USB package smoke test, commit & push to `main`.
+- [x] **A7.1** Verify `rawad-portal-state` exact `.id`, name, comment, safe `:global` grammar, and dual-hash digest (`rawadStateH1`, `rawadStateH2`) against `rawad-portal-anchor` in `routeros/rollback.rsc` BEFORE executing `/system script run`.
+- [x] **A7.2** Add monotonic `fence_token` to `monitor_locks`, `try_acquire_monitor_lock`, and `fenced_update_session_status` RPC in `supabase/schema.sql`, `backend/db/*`, and `SessionMonitor` to prevent stale mutations on lock loss during in-flight MikroTik or PostgreSQL calls.
+- [x] **A7.3** Harden `SessionMonitor` lock renewal lifecycle (`renewalSeq`, `lockStopped`, `await inFlightLockRenewal`, `!lockLost` release guard) against in-flight renewal races.
+- [x] **A7.4** Allow `mark_revocation_pending` to re-queue from `'disconnected'` on late MikroTik grant compensation failure so no late grant can remain un-revoked.
+- [x] **A7.5** Run Fifth, Sixth, and Seventh Audit regression suites, Backend & Frontend builds, SQL/RouterOS static checks, USB package build & smoke test, update `PROGRESS.md`, commit & push to `main`.

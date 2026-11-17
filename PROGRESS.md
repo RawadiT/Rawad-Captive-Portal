@@ -1,10 +1,10 @@
-# PROGRESS.md — Sixth Audit Remediation
+# PROGRESS.md — Seventh Audit Remediation
 
-**Baseline Commit:** `de61fa5793d5cece616fb6c3fc036b09d879a385`  
+**Baseline Commit:** `0883ebfafee1051b92ea334bc36486efa7ed35f7`  
 **Status:** Complete Locally (Live Supabase & MikroTik Tests NOT RUN — Not Deployed)
 
-- **A6.1:** Hardened `QuotaService.withLeaseRenewal` against late MikroTik completion after lease loss (bounded grace wait + `revocation_pending` & post-settlement compensating revoke if still in flight).
-- **A6.2:** Added periodic PostgreSQL `session_monitor_sync` lock renewal during long `SessionMonitor.syncSessions()` cycles and safe mutation abort on lock loss.
-- **A6.3:** Secured `rawad-portal-state` ownership in `deploy.rsc` & `rollback.rsc` via exact `.id` (`rawadIdStateScript`) and `rawadStateBodyLen` verification.
-- **A6.4:** Added pre-restore comparison against `rawadSetDnsRemote`, `rawadSetWwwSsl*`, `rawadSetTz`, and `rawadSetNtpEn` in `rollback.rsc` so manual admin changes after deploy are preserved.
-- **A6.5:** Added dependency checks and `:do { ... } on-error={ ... }` isolation in `rollback.rsc`; verified Backend/Frontend builds, Sixth Audit verification suite, and USB package smoke test.
+- **A7.1:** Updated `routeros/deploy.rsc` and `routeros/rollback.rsc` so `rollback.rsc` reads `rawad-portal-anchor` and `rawad-portal-state` as strings and verifies `.id`, length, safe grammar, and dual 31-bit polynomial hashes (`rawadStateH1`/`rawadStateH2`) BEFORE running `/system script run`.
+- **A7.2:** Added `fence_token` to `public.monitor_locks` and `fenced_update_session_status()` in `supabase/schema.sql`, wired through `DatabaseClient` / `SupabaseDatabaseClient` and `SessionMonitor` (`verifyLock()` + fenced status writes).
+- **A7.3:** Hardened `SessionMonitor` lock renewal with `renewalSeq` and `lockStopped` guards so late/failed renewals never schedule timers or release another process's lock.
+- **A7.4:** Extended `mark_revocation_pending` to allow re-queuing from `'disconnected'` if late MikroTik compensation fails after `SessionMonitor` already ran.
+- **A7.5:** Executed Backend `tsc`, Frontend `tsc --noEmit` & `next build`, Fifth/Sixth/Seventh Audit test suites, and `build-usb-package.ps1` + USB smoke test.

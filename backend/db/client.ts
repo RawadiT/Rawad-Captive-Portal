@@ -37,6 +37,11 @@ export interface FinalizeUserSessionResult {
   remaining_seconds: number;
 }
 
+export interface MonitorLockResult {
+  acquired: boolean;
+  fence_token: number;
+}
+
 export interface DatabaseClient {
   ping(): Promise<boolean>;
 
@@ -85,7 +90,15 @@ export interface DatabaseClient {
 
   renewProvisioningLease(sessionId: string, extendSeconds?: number): Promise<boolean>;
 
-  tryAcquireMonitorLock(lockName: string, ownerId: string, leaseSeconds?: number): Promise<boolean>;
+  tryAcquireMonitorLock(lockName: string, ownerId: string, leaseSeconds?: number): Promise<MonitorLockResult>;
+
+  fencedUpdateSessionStatus(
+    sessionId: string,
+    status: SessionStatus,
+    lockName: string,
+    ownerId: string,
+    fenceToken: number
+  ): Promise<boolean>;
 
   releaseMonitorLock(lockName: string, ownerId: string): Promise<void>;
 

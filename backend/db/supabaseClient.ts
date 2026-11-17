@@ -12,6 +12,7 @@ import type {
   DatabaseClient,
   FinalizeFreeSessionResult,
   FinalizeUserSessionResult,
+  MonitorLockResult,
 } from './client.js';
 
 export class SupabaseDatabaseClient implements DatabaseClient {
@@ -221,11 +222,31 @@ export class SupabaseDatabaseClient implements DatabaseClient {
     return Boolean(data);
   }
 
-  async tryAcquireMonitorLock(lockName: string, ownerId: string, leaseSeconds = 30): Promise<boolean> {
+  async tryAcquireMonitorLock(lockName: string, ownerId: string, leaseSeconds = 30): Promise<MonitorLockResult> {
     const { data, error } = await this.client.rpc('try_acquire_monitor_lock', {
       p_lock_name: lockName,
       p_owner_id: ownerId,
       p_lease_seconds: leaseSeconds,
+    });
+    if (error) throw new Error(error.message);
+    const rows = data as MonitorLockResult[] | null;
+    if (!rows || rows.length === 0) return { acquired: false, fence_token: 0 };
+    return { acquired: Boolean(rows[0].acquired), fence_token: Number(rows[0].fence_token ?? 0) };
+  }
+
+  async fencedUpdateSessionStatus(
+    sessionId: string,
+    status: SessionStatus,
+    lockName: string,
+    ownerId: string,
+    fenceToken: number
+  ): Promise<boolean> {
+    const { data, error } = await this.client.rpc('fenced_update_session_status', {
+      p_session_id: sessionId,
+      p_status: status,
+      p_lock_name: lockName,
+      p_owner_id: ownerId,
+      p_fence_token: fenceToken,
     });
     if (error) throw new Error(error.message);
     return Boolean(data);

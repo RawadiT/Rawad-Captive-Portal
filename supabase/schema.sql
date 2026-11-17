@@ -87,13 +87,16 @@ CREATE UNIQUE INDEX idx_sessions_one_active_user
   ON public.sessions (user_id)
   WHERE status IN ('provisioning', 'active', 'revocation_pending') AND session_type = 'user';
 
--- 5. Cross-process SessionMonitor lease locks (PostgreSQL-backed, crash-safe)
+-- 5. Cross-process SessionMonitor lease locks (PostgreSQL-backed, crash-safe, fenced)
 CREATE TABLE IF NOT EXISTS public.monitor_locks (
   lock_name TEXT PRIMARY KEY,
   owner_id TEXT NOT NULL,
+  fence_token BIGINT NOT NULL DEFAULT 0,
   lease_expires_at TIMESTAMPTZ NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE public.monitor_locks ADD COLUMN IF NOT EXISTS fence_token BIGINT NOT NULL DEFAULT 0;
 
 -- ==============================================================================
 -- ROW LEVEL SECURITY & PRIVILEGE HARDENING
@@ -453,7 +456,7 @@ AS $$
 BEGIN
   UPDATE public.sessions
   SET status = 'revocation_pending', lease_expires_at = NULL
-  WHERE id = p_session_id AND status IN ('provisioning', 'active');
+  WHERE id = p_session_id AND status IN ('provisioning', 'active', 'disconnected');
 END;
 $$;
 
@@ -487,11 +490,61 @@ BEGIN
 END;
 $$;
 
--- Acquire or renew a cross-process SessionMonitor lease lock in PostgreSQL
+-- Acquire or renew a cross-process SessionMonitor lease lock in PostgreSQL with monotonic fence_token
+DROP FUNCTION IF EXISTS public.try_acquire_monitor_lock(TEXT, TEXT, INTEGER);
 CREATE OR REPLACE FUNCTION public.try_acquire_monitor_lock(
   p_lock_name TEXT,
   p_owner_id TEXT,
   p_lease_seconds INTEGER DEFAULT 30
+)
+RETURNS TABLE (
+  acquired BOOLEAN,
+  fence_token BIGINT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_now TIMESTAMPTZ := clock_timestamp();
+  v_token BIGINT;
+BEGIN
+  IF TRIM(COALESCE(p_lock_name, '')) = '' OR TRIM(COALESCE(p_owner_id, '')) = '' THEN
+    RAISE EXCEPTION 'Lock name and owner ID are required';
+  END IF;
+  IF p_lease_seconds IS NULL OR p_lease_seconds < 5 OR p_lease_seconds > 300 THEN
+    RAISE EXCEPTION 'Invalid monitor lock lease seconds';
+  END IF;
+
+  INSERT INTO public.monitor_locks (lock_name, owner_id, fence_token, lease_expires_at, updated_at)
+  VALUES (TRIM(p_lock_name), TRIM(p_owner_id), 1, v_now + make_interval(secs => p_lease_seconds), v_now)
+  ON CONFLICT (lock_name) DO UPDATE
+    SET owner_id = EXCLUDED.owner_id,
+        fence_token = CASE
+          WHEN public.monitor_locks.owner_id = EXCLUDED.owner_id THEN public.monitor_locks.fence_token
+          ELSE public.monitor_locks.fence_token + 1
+        END,
+        lease_expires_at = EXCLUDED.lease_expires_at,
+        updated_at = EXCLUDED.updated_at
+    WHERE public.monitor_locks.owner_id = EXCLUDED.owner_id
+       OR public.monitor_locks.lease_expires_at < v_now
+  RETURNING public.monitor_locks.fence_token INTO v_token;
+
+  IF FOUND THEN
+    RETURN QUERY SELECT true, v_token;
+  ELSE
+    RETURN QUERY SELECT false, 0::BIGINT;
+  END IF;
+END;
+$$;
+
+-- Atomically update session status ONLY if the caller still owns the valid monitor lock & fence_token
+CREATE OR REPLACE FUNCTION public.fenced_update_session_status(
+  p_session_id UUID,
+  p_status TEXT,
+  p_lock_name TEXT,
+  p_owner_id TEXT,
+  p_fence_token BIGINT
 )
 RETURNS BOOLEAN
 LANGUAGE plpgsql
@@ -501,23 +554,25 @@ AS $$
 DECLARE
   v_now TIMESTAMPTZ := clock_timestamp();
 BEGIN
-  IF TRIM(COALESCE(p_lock_name, '')) = '' OR TRIM(COALESCE(p_owner_id, '')) = '' THEN
-    RAISE EXCEPTION 'Lock name and owner ID are required';
-  END IF;
-  IF p_lease_seconds IS NULL OR p_lease_seconds < 5 OR p_lease_seconds > 300 THEN
-    RAISE EXCEPTION 'Invalid monitor lock lease seconds';
+  IF p_session_id IS NULL THEN
+    RAISE EXCEPTION 'Session ID is required';
   END IF;
 
-  INSERT INTO public.monitor_locks (lock_name, owner_id, lease_expires_at, updated_at)
-  VALUES (TRIM(p_lock_name), TRIM(p_owner_id), v_now + make_interval(secs => p_lease_seconds), v_now)
-  ON CONFLICT (lock_name) DO UPDATE
-    SET owner_id = EXCLUDED.owner_id,
-        lease_expires_at = EXCLUDED.lease_expires_at,
-        updated_at = EXCLUDED.updated_at
-    WHERE public.monitor_locks.owner_id = EXCLUDED.owner_id
-       OR public.monitor_locks.lease_expires_at < v_now;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.monitor_locks ml
+    WHERE ml.lock_name = TRIM(COALESCE(p_lock_name, ''))
+      AND ml.owner_id = TRIM(COALESCE(p_owner_id, ''))
+      AND ml.fence_token = p_fence_token
+      AND ml.lease_expires_at >= v_now
+  ) THEN
+    RETURN false;
+  END IF;
 
-  RETURN FOUND;
+  UPDATE public.sessions
+  SET status = p_status
+  WHERE id = p_session_id;
+
+  RETURN true;
 END;
 $$;
 
@@ -594,6 +649,9 @@ GRANT EXECUTE ON FUNCTION public.renew_provisioning_lease(UUID, INTEGER) TO serv
 
 REVOKE ALL ON FUNCTION public.try_acquire_monitor_lock(TEXT, TEXT, INTEGER) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.try_acquire_monitor_lock(TEXT, TEXT, INTEGER) TO service_role;
+
+REVOKE ALL ON FUNCTION public.fenced_update_session_status(UUID, TEXT, TEXT, TEXT, BIGINT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.fenced_update_session_status(UUID, TEXT, TEXT, TEXT, BIGINT) TO service_role;
 
 REVOKE ALL ON FUNCTION public.release_monitor_lock(TEXT, TEXT) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.release_monitor_lock(TEXT, TEXT) TO service_role;
