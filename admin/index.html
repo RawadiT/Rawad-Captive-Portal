@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>شركة رواد التقنيات | لوحة الإدارة</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>لوحة إدارة الإنترنت — شركة رواد التقنيات</h1>
+      <button id="btn-logout" class="btn btn-sec" style="display:none;">تسجيل الخروج</button>
+    </div>
+
+    <div id="admin-msg" class="msg" style="display:none;"></div>
+
+    <section id="login-section" class="card" style="max-width:420px;margin:40px auto;">
+      <h2>تسجيل دخول المدير</h2>
+      <form id="admin-login-form">
+        <div style="margin-bottom:10px;">
+          <label for="adm-user">اسم المستخدم</label>
+          <input id="adm-user" type="text" required autocomplete="username" />
+        </div>
+        <div style="margin-bottom:14px;">
+          <label for="adm-pass">كلمة المرور</label>
+          <input id="adm-pass" type="password" required autocomplete="current-password" />
+        </div>
+        <button type="submit" class="btn" style="width:100%;">دخول</button>
+      </form>
+    </section>
+
+    <main id="dashboard-section" style="display:none;">
+      <section class="card">
+        <h2>إنشاء حساب جديد</h2>
+        <form id="create-user-form" class="grid">
+          <div>
+            <label for="new-username">اسم المستخدم</label>
+            <input id="new-username" type="text" required />
+          </div>
+          <div>
+            <label for="new-password">كلمة المرور</label>
+            <input id="new-password" type="password" required minlength="6" />
+          </div>
+          <div>
+            <label for="new-duration">المدة (بالدقائق)</label>
+            <input id="new-duration" type="number" min="1" value="180" required />
+          </div>
+          <div style="display:flex;align-items:flex-end;">
+            <button type="submit" class="btn" style="width:100%;">إنشاء الحساب</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="header" style="margin-bottom:8px;">
+          <h2>الحسابات المسجلة</h2>
+          <button id="btn-refresh" class="btn btn-sec" type="button">تحديث</button>
+        </div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>اسم المستخدم</th>
+                <th>المدة (دقيقة)</th>
+                <th>الحالة</th>
+                <th>أول دخول</th>
+                <th>تاريخ الانتهاء</th>
+                <th>الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="users-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    window.RAWAD_ADMIN_CONFIG = {
+      supabaseUrl: "https://YOUR_PROJECT_ID.supabase.co",
+      supabaseAnonKey: "YOUR_SUPABASE_ANON_KEY"
+    };
+  </script>
+  <script src="admin.js"></script>
+</body>
+</html>

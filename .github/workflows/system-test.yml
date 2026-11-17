@@ -1,0 +1,61 @@
+name: System & PostgreSQL Verification
+
+on:
+  push:
+    branches: [field-test-preparation]
+  pull_request:
+    branches: [field-test-preparation]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: rawad_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d rawad_test"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Ensure psql client
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y postgresql-client
+          fi
+
+      - name: Initialize Supabase roles for local PG
+        env:
+          TEST_DATABASE_URL: postgres://postgres:test_password@127.0.0.1:5432/rawad_test
+        run: |
+          psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c "
+            DO \$\$
+            BEGIN
+              IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon NOLOGIN; END IF;
+              IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
+              IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN CREATE ROLE service_role NOLOGIN; END IF;
+            END \$\$;
+          "
+
+      - name: Run Permanent System & PostgreSQL Verification
+        env:
+          TEST_DATABASE_URL: postgres://postgres:test_password@127.0.0.1:5432/rawad_test
+        run: |
+          set -o pipefail
+          node tests/verify_system.mjs | tee verify.log
+          grep -q "POSTGRESQL 16 SCHEMA & EDGE-FUNCTION RPC TESTS PASSED" verify.log
+          grep -q "ALL SYSTEM VERIFICATIONS PASSED" verify.log

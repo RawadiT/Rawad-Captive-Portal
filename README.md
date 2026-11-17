@@ -1,19 +1,10 @@
-# نظام Captive Portal — روتانا - شركة رواد التقنيات
+# Rawad Captive Portal (MikroTik HotSpot + Supabase)
 
-نظام بوابة مصادقة لشبكة Wi-Fi للزبائن، مصمم للعمل مع جهاز **MikroTik RB4011iGS+RM (RouterOS v7)** على منفذ **`ether10`** فقط، وباعتماد **Supabase PostgreSQL** عبر HTTPS كقاعدة بيانات وحيدة.
+نظام Captive Portal لشركة رواد التقنيات على راوتر **MikroTik RB4011iGS+RM (RouterOS v7)**، بنطاق محصور في **`ether10` فقط**.
 
-## المميزات الأساسية
-- **حصة مجانية مرة واحدة (30 دقيقة لكل MAC):** عبر زر `إنترنت مجاني لمدة 30 دقيقة`، بصلاحية زمنية مطلقة (`Wall-Clock` UTC) لا تتجدد يومياً ولا تُعاد عند انقطاع الاتصال أو إعادة تشغيل الخادم أو الراوتر.
-- **حسابات بمدد زمنية محددة:** تسجيل الدخول بـ `Username` و`Password`، تبدأ المدة عند أول دخول ناجح وتستمر بالعد التنازلي (`Wall-Clock` UTC) دون ارتباطها بعنوان `MAC`.
-- **فرض انتهاء الجلسات على MikroTik:** عبر `session-timeout` في User Profile مخصص لكل جلسة (`rawad-sess-*`) مع إزالة `mac-cookie` لمنع إعادة الدخول التلقائي الصامت.
-- **نطاق محصور بـ `ether10` فقط:** لا تعدل سكربتات `routeros/*.rsc` أي منفذ من `ether1` إلى `ether9`.
-
-## هيكل المشروع
-- `backend/` — خادم Node.js + TypeScript (API، المصادقة، إدارة الحصص، مراقب الجلسات، تكامل MikroTik REST وSupabase HTTPS).
-- `frontend/` — تطبيق Next.js موحد (`/` لبوابة الزبائن، `/admin` للوحة الإدارة المعزولة عبر Nginx).
-- `supabase/schema.sql` — مخطط PostgreSQL مع RLS ودوال RPC الذرية (`commit_free_session`, `commit_user_session`).
-- `routeros/` — سكربتات RouterOS v7 المحصورة بـ `ether10` (`preflight.rsc`, `deploy.rsc`, `verify.rsc`, `rollback.rsc`).
-- `hotspot/` — صفحات MikroTik HotSpot التقليدية الاحتياطية.
-- `deployment/` — ملفات Docker وNginx وSSL/TLS وسكربت بناء حزمة USB (`build-usb-package.ps1`).
-
-راجع [DEPLOYMENT.md](DEPLOYMENT.md) لتعليمات التثبيت والتشغيل الكاملة.
+## البنية المعتمدة
+- **`hotspot/`**: واجهة Captive Portal مستضافة مباشرة داخل MikroTik HotSpot (خياران فقط: 30 دقيقة مجانية يومياً لكل MAC بتوقيت `Asia/Baghdad`، وتسجيل الدخول بحسابات المستخدمين).
+- **`supabase/`**: قاعدة بيانات PostgreSQL (`schema.sql`) وEdge Functions (`portal-auth`, `verify-mac`, `admin-api`) دون أي Backend دائم التشغيل أو Vercel أو VPS.
+- **`admin/`**: لوحة إدارة ثابتة (`index.html`, `admin.js`, `style.css`) تتصل مباشرة بـ `admin-api`.
+- **`routeros/`**: سكربتات RouterOS v7 (`deploy.rsc`, `rollback.rsc`, `verify.rsc`) لنشر وإدارة `ether10` فقط.
+- **`tests/`**: اختبارات النظام الدائمة (`verify_system.mjs`).

@@ -3,21 +3,28 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>روتانا - شركة رواد التقنيات | حالة الاتصال</title>
+  <meta http-equiv="refresh" content="30" />
+  <title>شركة رواد التقنيات | حالة الاتصال</title>
   <link rel="stylesheet" href="assets/style.css" />
-  <script>
-    (function () {
-      var portalBase = "https://wifi.YOUR_COMPANY_DOMAIN.com";
-      window.location.replace(portalBase + "/?mac=" + encodeURIComponent("$(mac)") + "&ip=" + encodeURIComponent("$(ip)"));
-    })();
-  </script>
 </head>
 <body>
   <main class="card">
     <img src="assets/logo.png" alt="شعار شركة رواد التقنيات" class="logo" />
-    <h1>روتانا - شركة رواد التقنيات</h1>
-    <p>تم الاتصال بالشبكة بنجاح. يمكنك متابعة الوقت المتبقي من خلال البوابة.</p>
-    <a class="btn" href="https://wifi.YOUR_COMPANY_DOMAIN.com/?mac=$(mac-esc)&ip=$(ip)">عرض حالة الجلسة</a>
+    <h1>تم الاتصال بالإنترنت</h1>
+    <p class="sub">جلستك نشطة الآن عبر شبكة ضيوف شركة رواد التقنيات.</p>
+
+    <div class="section">
+      <div class="stat-row"><span>عنوان الجهاز</span><span>$(mac)</span></div>
+      <div class="stat-row"><span>عنوان IP</span><span>$(ip)</span></div>
+      <div class="stat-row"><span>مدة الاتصال</span><span>$(uptime)</span></div>
+      $(if session-time-left)
+      <div class="stat-row"><span>الوقت المتبقي</span><span>$(session-time-left)</span></div>
+      $(endif)
+    </div>
+
+    <form action="$(link-logout)" method="post">
+      <button type="submit" class="btn">تسجيل الخروج</button>
+    </form>
   </main>
 </body>
 </html>

@@ -1,0 +1,80 @@
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+  direction: rtl;
+  background: #0f172a;
+  color: #f1f5f9;
+  padding: 24px;
+}
+.container { max-width: 960px; margin: 0 auto; }
+.card {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 18px;
+}
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+h1, h2 { margin: 0 0 12px; }
+h1 { font-size: 22px; }
+h2 { font-size: 17px; color: #cbd5e1; }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+label { display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px; }
+input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #475569;
+  background: #0f172a;
+  color: #f8fafc;
+  font-size: 14px;
+}
+.btn {
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: none;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn-danger { background: #dc2626; }
+.btn-ok { background: #059669; }
+.btn-sec { background: #475569; }
+.msg {
+  padding: 10px 14px;
+  border-radius: 10px;
+  margin-bottom: 14px;
+  font-size: 13px;
+}
+.err { background: rgba(220, 38, 38, 0.2); border: 1px solid #ef4444; color: #fecaca; }
+.ok { background: rgba(5, 150, 105, 0.2); border: 1px solid #10b981; color: #a7f3d0; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 10px 8px; border-bottom: 1px solid #334155; text-align: right; }
+th { color: #94a3b8; font-weight: 600; }
+.badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.b-active { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; }
+.b-pending { background: rgba(59, 130, 246, 0.2); color: #93c5fd; }
+.b-expired { background: rgba(245, 158, 11, 0.2); color: #fcd34d; }
+.b-disabled { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
+.actions { display: flex; gap: 6px; flex-wrap: wrap; }

@@ -5,25 +5,59 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="pragma" content="no-cache" />
   <meta http-equiv="expires" content="-1" />
-  <title>روتانا - شركة رواد التقنيات | تسجيل الدخول</title>
+  <title>شركة رواد التقنيات | بوابة الإنترنت</title>
   <link rel="stylesheet" href="assets/style.css" />
-  <script>
-    (function () {
-      var portalBase = "https://wifi.YOUR_COMPANY_DOMAIN.com";
-      var mac = "$(mac)";
-      var ip = "$(ip)";
-      var target = portalBase + "/?mac=" + encodeURIComponent(mac) + "&ip=" + encodeURIComponent(ip);
-      window.location.replace(target);
-    })();
-  </script>
 </head>
 <body>
   <main class="card">
     <img src="assets/logo.png" alt="شعار شركة رواد التقنيات" class="logo" />
-    <h1>روتانا - شركة رواد التقنيات</h1>
-    <p>جارٍ توجيهك عبر اتصال آمن إلى بوابة الدخول...</p>
-    $(if error)<div class="err">$(error)</div>$(endif)
-    <a class="btn" href="https://wifi.YOUR_COMPANY_DOMAIN.com/?mac=$(mac-esc)&ip=$(ip)">الانتقال إلى بوابة الدخول</a>
+    <h1>شركة رواد التقنيات</h1>
+    <p class="sub">مرحباً بك في شبكة الضيوف. اختر طريقة الاتصال المناسبة.</p>
+
+    $(if error)<div class="msg err">$(error)</div>$(endif)
+    <div id="msg-box" class="msg" style="display:none;"></div>
+
+    <section class="section">
+      <div class="section-title">الإنترنت المجاني</div>
+      <div class="section-desc">30 دقيقة مجانية يومياً لكل جهاز (تتجدد عند منتصف الليل بتوقيت بغداد).</div>
+      <button id="btn-free" type="button" class="btn btn-free">الحصول على 30 دقيقة مجانية</button>
+    </section>
+
+    <div class="divider">أو</div>
+
+    <section class="section">
+      <div class="section-title">تسجيل الدخول بالحساب</div>
+      <form id="login-form" autocomplete="off">
+        <div class="field">
+          <label for="username">اسم المستخدم</label>
+          <input id="username" name="username" type="text" required autocomplete="username" />
+        </div>
+        <div class="field">
+          <label for="password">كلمة المرور</label>
+          <input id="password" name="password" type="password" required autocomplete="current-password" />
+        </div>
+        <button id="btn-login" type="submit" class="btn">تسجيل الدخول</button>
+      </form>
+    </section>
+
+    <div class="meta">الجهاز: $(mac) | العنوان: $(ip)</div>
+
+    <form id="hs-auth-form" name="sendin" action="$(link-login-only)" method="post" style="display:none;">
+      <input type="hidden" name="username" value="rawad-gate" />
+      <input type="hidden" name="password" value="rawad-gate" />
+      <input type="hidden" name="dst" value="$(link-orig)" />
+      <input type="hidden" name="popup" value="true" />
+    </form>
   </main>
+
+  <script>
+    window.RAWAD_PORTAL_CONFIG = {
+      supabaseUrl: "https://YOUR_PROJECT_ID.supabase.co",
+      supabaseAnonKey: "YOUR_SUPABASE_ANON_KEY",
+      mac: "$(mac)",
+      ip: "$(ip)"
+    };
+  </script>
+  <script src="assets/portal.js"></script>
 </body>
 </html>

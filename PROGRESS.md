@@ -1,11 +1,19 @@
-# PROGRESS.md — PostgreSQL Integration Fix (`finalize_free_session`)
+# PROGRESS.md — Rawad Captive Portal
 
 **Branch:** `field-test-preparation`  
-**Baseline Commit:** `87ce639626dd5ed633624943d9d0b59c0bdb54cc`  
-**Status:** Local PostgreSQL 16 + PostgREST Integration Verified (2/2 Consecutive Runs Passed)
+**Status:** Complete Locally & Verified in CI (Live Supabase & Real MikroTik Lab Test Pending)
 
-- **PG1:** Fixed `ON CONFLICT (mac_address)` -> `ON CONFLICT ON CONSTRAINT free_quotas_pkey` in `public.finalize_free_session` (`supabase/schema.sql`), keeping `mac_address` in the RPC output table intact.
-- **PG2:** Audited all other `RETURNS TABLE` functions in `supabase/schema.sql`; no other ambiguous `OUT`-variable vs column references exist.
-- **PG3:** Hardened `tests/verify_supabase_integration.mjs` with per-run random MAC/username/lock identifiers, targeted REST cleanup in `finally`, guaranteed monitor lock release, and `process.exitCode` error handling.
-- **PG4:** Executed `node tests/verify_supabase_integration.mjs` twice consecutively against Docker PostgreSQL 16 + PostgREST (`127.0.0.1:54321`) covering `ping`, `begin/finalize free session`, duplicate MAC conflict, `monitor_lock` + `fencedUpdateSessionStatus`, `createUser`, and `begin/finalize user session` — both runs exited `0` (`ALL LOCAL SUPABASE/POSTGRESQL INTEGRATION TESTS PASSED`).
-- **Not Run (Mandatory Constraints):** Production Supabase & Real MikroTik RouterOS remain `NOT RUN`.
+## Completed Implementation
+- **Supabase (`supabase/schema.sql`, `supabase/functions/`):**
+  - Daily 30-min free quota per MAC in `Asia/Baghdad` (`PRIMARY KEY (mac_address, quota_date)`), UTC timestamps, and `pg_advisory_xact_lock`.
+  - User accounts with duration starting on first login (`authorize_user_login`), plus `verify_mac_authorization` and `disconnect_mac_session`.
+  - Edge Functions: `portal-auth`, `verify-mac` (`x-router-secret` header), `admin-api` (HMAC JWT admin auth + CRUD + enable/disable).
+- **MikroTik HotSpot UI (`hotspot/`):** Self-contained `login.html`, `status.html`, `logout.html`, `error.html`, `assets/portal.js`, `assets/style.css` (2 options only, zero external CDNs, no `localStorage` passwords).
+- **Static Admin UI (`admin/`):** `index.html`, `admin.js`, `style.css` (zero Vercel/VPS/Backend).
+- **RouterOS (`routeros/`):** `deploy.rsc`, `rollback.rsc`, `verify.rsc` (`ether10` only, `rawad-verified` address-list, `on-login` `/tool fetch` to `verify-mac`, Fail-Closed).
+- **Cleanup:** Removed obsolete `backend/`, `frontend/`, `deployment/`, `usb-package/`, and legacy test files.
+
+## Verification Results
+- `node tests/verify_system.mjs` against Docker PostgreSQL 16: `POSTGRESQL 16 SCHEMA & EDGE-FUNCTION RPC TESTS PASSED` and `ALL SYSTEM VERIFICATIONS PASSED` (`exit code 0`).
+- Post-cleanup `node tests/verify_system.mjs` (static checks): `ALL SYSTEM VERIFICATIONS PASSED` (`exit code 0`).
+- **Not Executed:** Live Supabase project & physical MikroTik RB4011 device tests (`NOT RUN` — ready for isolated lab test).
