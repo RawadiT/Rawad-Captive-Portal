@@ -125,12 +125,12 @@ async function run() {
     assert.equal(beginFree.allowed, true, 'beginFreeProvisioning must allow fresh MAC');
     assert.ok(beginFree.session_id, 'beginFreeProvisioning must return session_id');
     createdSessionIds.push(beginFree.session_id);
+    createdFreeMacs.push(freeMac);
 
     const finFree = await db.finalizeFreeSession(beginFree.session_id, 1800);
     assert.equal(finFree.allowed, true, 'finalizeFreeSession must succeed');
     assert.equal(finFree.is_new, true, 'finalizeFreeSession must mark is_new=true');
     assert.equal(finFree.mac_address, freeMac, 'finalizeFreeSession must return mac_address');
-    createdFreeMacs.push(freeMac);
 
     const dupFree = await db.beginFreeProvisioning({
       macAddress: freeMac,
