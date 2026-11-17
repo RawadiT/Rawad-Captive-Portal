@@ -1,8 +1,10 @@
-# TASKS.md — Final Closure (PostgreSQL Fencing Hardening)
+# TASKS.md — Safe Field-Test Package Preparation
 
-**Baseline Commit:** `68554ae71fe40eee66e5a250d5a92e80dfe1a6b3`
+**Branch:** `field-test-preparation`  
+**Baseline Commit:** `e6bac87430d1769864ba5e055d01b9ffe0445f17`
 
-- [x] **C1** Reject `p_fence_token IS NULL`, empty `p_lock_name`/`p_owner_id`, and use `IS DISTINCT FROM` in `public.fenced_update_session_status()` (`supabase/schema.sql`).
-- [x] **C2** Acquire `SELECT ... FOR UPDATE` on `monitor_locks` FIRST, then validate `v_lock.lease_expires_at < clock_timestamp()` after acquiring the row lock.
-- [x] **C3** Commit `tests/verify_fencing_race.mjs` implementing a real 2-connection `psql` concurrency & fencing test suite (8 cases + cleanup).
-- [x] **C4** Run Fifth, Sixth, and Seventh Audit suites, Backend & Frontend builds, SQL & RouterOS static checks, USB build & smoke test, update `PROGRESS.md`, commit & push to `main`.
+- [x] **FT1** Add isolated `FIELD_TEST_MODE` & `MIKROTIK_MODE=mock` support (`backend/config/env.ts`, `backend/mikrotik/mockAdapter.ts`, `backend/api/server.ts`) with fail-closed rejection of production Supabase URLs (`*.supabase.co`), real MikroTik hosts, and `NODE_ENV=production`.
+- [x] **FT2** Create `deployment/.env.field-test.example` (test-only placeholders, zero real secrets) and harden `deployment/build-usb-package.ps1` to strip any `.env` or private TLS certificates/keys (`*.key`, `*.pem`, `*.crt`, `*.p12`).
+- [x] **FT3** Add `tests/verify_field_test.mjs` covering API health check, `MockMikroTikAdapter`, 30m free quota & duplicate MAC blocking, Username/Password first-login duration & `bindMac=false`, session expiry/revocation, DB fail-closed, and production-URL isolation.
+- [x] **FT4** Document isolated test procedures, boundaries, and Local Isolated vs MikroTik Lab vs Production Deployment differences in `FIELD_TEST.md`.
+- [x] **FT5** Run Backend/Frontend builds, `tests/verify_field_test.mjs`, USB package build & smoke test, update `PROGRESS.md`, and commit on `field-test-preparation` (no merge to `main`, no deployment).

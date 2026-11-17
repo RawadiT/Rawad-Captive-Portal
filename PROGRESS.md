@@ -1,9 +1,13 @@
-# PROGRESS.md — Final Closure (PostgreSQL Fencing Hardening)
+# PROGRESS.md — Safe Field-Test Package Preparation
 
-**Baseline Commit:** `68554ae71fe40eee66e5a250d5a92e80dfe1a6b3`  
-**Status:** Complete Locally (Live Supabase & MikroTik Tests NOT RUN — Not Deployed)
+**Branch:** `field-test-preparation`  
+**Baseline Commit:** `e6bac87430d1769864ba5e055d01b9ffe0445f17`  
+**Status:** Isolated Field-Test Package Ready (Live Supabase & Real MikroTik NOT RUN — Not Deployed)
 
-- **C1:** Added explicit `p_fence_token IS NULL`, `v_lock_name = ''`, `v_owner_id = ''` rejection and `IS DISTINCT FROM` comparisons in `public.fenced_update_session_status()`.
-- **C2:** Moved lease expiry check (`clock_timestamp()`) after `SELECT ... FOR UPDATE` in `public.fenced_update_session_status()` so leases expiring while waiting on the row lock are rejected.
-- **C3:** Added `tests/verify_fencing_race.mjs` (2 independent `psql` connections testing all 8 real PostgreSQL concurrency/fencing scenarios + cleanup, gated on `TEST_DATABASE_URL`).
-- **C4:** Completed final builds, Fifth/Sixth/Seventh Audit suites, SQL/RouterOS static validations, and USB package build & smoke test.
+- **FT1:** Implemented `MockMikroTikAdapter` (`backend/mikrotik/mockAdapter.ts`), `validateFieldTestIsolation()` (`backend/config/env.ts`), and `MIKROTIK_MODE=mock` wiring (`backend/api/server.ts`).
+- **FT2:** Added `deployment/.env.field-test.example` and hardened `deployment/build-usb-package.ps1` against accidental inclusion of `.env` files or private TLS keys/certs.
+- **FT3:** Created `tests/verify_field_test.mjs` covering all isolated Local Field-Test scenarios (health check, mock MikroTik, 30m free quota, duplicate MAC 409/403, Username/Password first-login start & no MAC binding, expiry/revocation, DB fail-closed, and production isolation guards).
+- **FT4:** Created `FIELD_TEST.md` detailing Local Isolated Test, MikroTik Lab Test, and Production Deployment differences, execution steps, stop procedure, and test boundaries.
+- **Remaining / Not Executed Locally:**
+  - Live PostgreSQL 2-connection test (`tests/verify_fencing_race.mjs`) is `SKIPPED` locally when `TEST_DATABASE_URL` is unset (verified 8/8 in GitHub Actions `postgres:16` run `44128557227`).
+  - Live Supabase & Real MikroTik RouterOS tests are `NOT RUN` per mandatory safety constraints.

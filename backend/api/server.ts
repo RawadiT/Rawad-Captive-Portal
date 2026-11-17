@@ -1,6 +1,8 @@
 import { AdminService } from '../authentication/adminService.js';
 import { loadConfig } from '../config/env.js';
 import { SupabaseDatabaseClient } from '../db/supabaseClient.js';
+import type { MikroTikAdapter } from '../mikrotik/adapter.js';
+import { MockMikroTikAdapter } from '../mikrotik/mockAdapter.js';
 import { RouterOSRestClient } from '../mikrotik/restClient.js';
 import { QuotaService } from '../quota-manager/quotaService.js';
 import { SessionMonitor } from '../session-monitor/sessionMonitor.js';
@@ -18,15 +20,18 @@ async function main() {
   const adminService = new AdminService(db, config.tokenSecret);
   await adminService.ensureDefaultAdmin(config.defaultAdminUsername, config.defaultAdminPassword);
 
-  const mikrotik = new RouterOSRestClient({
-    host: config.mikrotikHost,
-    port: config.mikrotikPort,
-    username: config.mikrotikUsername,
-    password: config.mikrotikPassword,
-    rejectUnauthorized: config.mikrotikTlsRejectUnauthorized,
-    caCertPath: config.mikrotikCaCertPath,
-    hotspotServer: config.mikrotikHotspotServer,
-  });
+  const mikrotik: MikroTikAdapter =
+    config.mikrotikMode === 'mock'
+      ? new MockMikroTikAdapter()
+      : new RouterOSRestClient({
+          host: config.mikrotikHost,
+          port: config.mikrotikPort,
+          username: config.mikrotikUsername,
+          password: config.mikrotikPassword,
+          rejectUnauthorized: config.mikrotikTlsRejectUnauthorized,
+          caCertPath: config.mikrotikCaCertPath,
+          hotspotServer: config.mikrotikHotspotServer,
+        });
 
   const quotaService = new QuotaService(db, mikrotik, {
     freeQuotaSeconds: config.freeQuotaSeconds,
@@ -46,7 +51,7 @@ async function main() {
 
   const server = app.listen(config.port, config.host, () => {
     console.log(
-      `[Rawad Captive Portal Backend] running on http://${config.host}:${config.port} (DB: Supabase HTTPS, MikroTik: routeros-rest)`
+      `[Rawad Captive Portal Backend] running on http://${config.host}:${config.port} (DB: Supabase HTTPS, MikroTik: ${config.mikrotikMode}, FieldTest: ${config.fieldTestMode})`
     );
   });
 

@@ -28,9 +28,17 @@ Copy-Item -Recurse -Force (Join-Path $RootDir "supabase") (Join-Path $OutDir "su
 Copy-Item -Recurse -Force (Join-Path $RootDir "routeros") (Join-Path $OutDir "routeros")
 Copy-Item -Recurse -Force (Join-Path $RootDir "hotspot") (Join-Path $OutDir "hotspot")
 Copy-Item -Recurse -Force (Join-Path $RootDir "deployment") (Join-Path $OutDir "deployment")
-Remove-Item -Force (Join-Path $OutDir "deployment\.env") -ErrorAction SilentlyContinue
+# Remove any real .env* files (keep ONLY .env.example and .env.field-test.example)
+Get-ChildItem -Path $OutDir -Recurse -Force -Filter ".env*" -File | Where-Object {
+  $_.Name -notin @(".env.example", ".env.field-test.example")
+} | Remove-Item -Force -ErrorAction SilentlyContinue
+# Remove any private TLS certificates or keys
 Remove-Item -Recurse -Force (Join-Path $OutDir "deployment\tls\certs") -ErrorAction SilentlyContinue
+Get-ChildItem -Path (Join-Path $OutDir "deployment") -Recurse -Force -Include "*.key","*.pem","*.crt","*.p12" -File | Remove-Item -Force -ErrorAction SilentlyContinue
 Copy-Item -Force (Join-Path $RootDir "DEPLOYMENT.md") $OutDir
+if (Test-Path (Join-Path $RootDir "FIELD_TEST.md")) {
+  Copy-Item -Force (Join-Path $RootDir "FIELD_TEST.md") $OutDir
+}
 
 # 4. Create start scripts inside USB package
 @"
