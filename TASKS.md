@@ -1,10 +1,9 @@
-# TASKS.md — Harden Field-Test Isolation Before Approval
+# TASKS.md — Final Field-Test Verification Fixes
 
 **Branch:** `field-test-preparation`  
-**Baseline Commit:** `9db717cc99130f71e988dc12c1daa825b9a2ffc8`
+**Baseline Commit:** `4a540922ab9fa8f427071068c2c3cb8e52cebff7`
 
-- [x] **H1** Enforce loopback-only `HOST` (`127.0.0.1` or `localhost`) and loopback origins in `validateFieldTestIsolation()` (`backend/config/env.ts`).
-- [x] **H2** Enforce `RAWAD_FIELD_TEST_PACKAGE_LOCK=true` in `backend/api/server.ts`, add `field-test-preflight.mjs` + `start-field-test.bat` + `start-windows.bat` in `deployment/build-usb-package.ps1`, and strip production `.env.example` from the field-test USB package.
-- [x] **H3** Reclassify `tests/verify_field_test.mjs` explicitly as an In-Memory Application Test and add reproducible local PostgreSQL 16 + PostgREST stack (`deployment/docker-compose.field-test.yml`, `deployment/field-test-init.sql`, `deployment/nginx/field-test-postgrest.conf`) + `tests/verify_supabase_integration.mjs`.
-- [x] **H4** Add actual outbound network isolation assertions (`net.Socket.prototype.connect`, `http.request`, `https.request`), loopback bind check, and package-lock rejection checks in `tests/verify_field_test.mjs`.
-- [x] **H5** Update `FIELD_TEST.md` & `PROGRESS.md`, run builds, `tests/verify_field_test.mjs`, `docker compose config`, and USB build + fail-safe preflight/smoke tests; commit to `field-test-preparation`.
+- [x] **V1** Make `tests/verify_supabase_integration.mjs` fail closed (`exit 1`) by default whenever the local PostgreSQL/PostgREST service is unavailable.
+- [x] **V2** Update `FIELD_TEST.md` to require `backend` build and Docker readiness verification (`docker info`, `docker compose ps`) before running `tests/verify_supabase_integration.mjs`.
+- [x] **V3** Clarify API-level vs container/OS-level network isolation in `tests/verify_field_test.mjs` and `FIELD_TEST.md`, and add an `internal: true` Docker network (`field_test_internal`) to `deployment/docker-compose.field-test.yml`.
+- [x] **V4** Run Backend/Frontend builds, `tests/verify_field_test.mjs`, `docker compose config`, verify `tests/verify_supabase_integration.mjs` fails closed when the service is stopped, rebuild & smoke-test USB package, update `PROGRESS.md`, and commit to `field-test-preparation`.

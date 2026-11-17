@@ -10,32 +10,47 @@
 | :--- | :--- | :--- | :--- | :--- |
 | **الأداة / المسار** | `node tests/verify_field_test.mjs` | `deployment/docker-compose.field-test.yml` + `node tests/verify_supabase_integration.mjs` | راوتر معمل معزول + `MIKROTIK_MODE=routeros-rest` | راوتر الشركة `ether10` + Supabase الإنتاجية |
 | **قاعدة البيانات** | محاكاة في الذاكرة (ليست PostgreSQL حقيقية) | PostgreSQL 16 + PostgREST محلي على `127.0.0.1:54321` مع `supabase/schema.sql` | قاعدة بيانات اختبارية معزولة | Supabase الإنتاجية (HTTPS) |
-| **MikroTik** | `MockMikroTikAdapter` (صفر اتصالات شبكية) | `MockMikroTikAdapter` (أو غير مستخدم في اختبار DB) | راوتر معمل معزول تماماً | `192.168.20.1` (`ether10` فقط) |
+| **MikroTik** | `MockMikroTikAdapter` (على مستوى Node.js API) | `MockMikroTikAdapter` (أو غير مستخدم في اختبار DB) | راوتر معمل معزول تماماً | `192.168.20.1` (`ether10` فقط) |
 | **العنوان / البروتوكول** | `HOST=127.0.0.1` (Loopback فقط) | `127.0.0.1:54321` / `127.0.0.1:54322` | شبكة المعمل المعزولة | `https://wifi.YOUR_COMPANY_DOMAIN.com` |
-
-> **تنبيه:** لا يُعتبر الاختبار في الذاكرة (`tests/verify_field_test.mjs`) بديلاً عن اختبار تكامل PostgreSQL الفعلي، كما لا يُعتبر `MockMikroTikAdapter` بديلاً عن اختبار راوتر MikroTik المعملي.
 
 ---
 
-## 2. تشغيل اختبار التطبيق في الذاكرة وعزل الشبكة (المستوى 1)
+## 2. حدود ضمانات عزل الشبكة (API-Level vs Container/OS-Level)
+- **عزل على مستوى التطبيق / API (`tests/verify_field_test.mjs`):**
+  - يتحقق من رفض `loadConfig()` لروابط `*.supabase.co` وعناوين MikroTik غير المحاكاة وعناوين `HOST` غير Loopback.
+  - يتحقق على مستوى Node.js (`net.Socket.prototype.connect`, `http.request`, `https.request`) من أن `MockMikroTikAdapter` لا يفتح أي اتصال صادر. **هذا فحص على مستوى Node.js API وليس بديلاً عن عزل الشبكة على مستوى نظام التشغيل أو الحاويات.**
+- **عزل على مستوى الحاويات (`deployment/docker-compose.field-test.yml`):**
+  - شبكتا `postgres` و`postgrest` متصلتان بشبكة `field_test_internal` (`internal: true`) دون أي وصول للإنترنت أو الشبكة المحلية الخارجية، بينما بوابة `supabase-local-gateway` مربوطة حصراً على `127.0.0.1:54321`.
+
+---
+
+## 3. تشغيل اختبار التطبيق في الذاكرة (المستوى 1)
 ```powershell
 cd backend; npm run build; cd ..
 cd frontend; npx tsc --noEmit; npm run build; cd ..
 node tests/verify_field_test.mjs
 ```
-يتحقق هذا الاختبار من:
-- ربط الخادم على `127.0.0.1` فقط ورفض `0.0.0.0` وعناوين LAN/WAN في `FIELD_TEST_MODE=true`.
-- عدم إنشاء أي اتصال شبكي صادر (`net.Socket.connect`, `http.request`, `https.request`) أثناء عمليات `MockMikroTikAdapter`.
-- رفض `*.supabase.co`، وعناوين MikroTik الحقيقية، و`MIKROTIK_MODE=routeros-rest`، و`NODE_ENV=production`.
-- رفض تشغيل حزمة USB (`RAWAD_FIELD_TEST_PACKAGE_LOCK=true`) إذا أُعطيت إعدادات إنتاجية.
 
 ---
 
-## 3. تشغيل بيئة PostgreSQL / PostgREST المحلية (المستوى 2)
+## 4. تشغيل اختبار تكامل PostgreSQL / PostgREST المحلي (المستوى 2 — Fail-Closed)
 
-### التشغيل:
+### المتطلبات:
+1. التأكد من جاهزية محرك Docker:
+```powershell
+docker info
+```
+2. بناء Backend أولاً (مطلوب لأن الاختبار يستورد `backend/dist/`):
+```powershell
+cd backend; npm run build; cd ..
+```
+3. تشغيل حاويات الاختبار المحلية والتحقق من جاهزيتها:
 ```powershell
 docker compose -f deployment/docker-compose.field-test.yml up -d
+docker compose -f deployment/docker-compose.field-test.yml ps
+```
+4. تشغيل اختبار التكامل الفعلي (يفشل برمز خروج غير صفري `1` تلقائياً إذا كانت الخدمة متوقفة أو غير متاحة):
+```powershell
 node tests/verify_supabase_integration.mjs
 ```
 
@@ -46,7 +61,7 @@ docker compose -f deployment/docker-compose.field-test.yml down -v
 
 ---
 
-## 4. تشغيل حزمة USB الآمنة (وضع Field-Test الإلزامي)
+## 5. تشغيل حزمة USB الآمنة (وضع Field-Test الإلزامي)
 ```powershell
 pwsh -NoProfile -File "deployment\build-usb-package.ps1"
 ```

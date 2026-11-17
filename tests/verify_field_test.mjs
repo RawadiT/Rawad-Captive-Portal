@@ -429,7 +429,8 @@ const addr = server.address();
 assert.equal(addr.address, '127.0.0.1', 'Field-Test server must bind ONLY to loopback 127.0.0.1');
 const baseUrl = `http://127.0.0.1:${addr.port}`;
 
-// Verify MockMikroTikAdapter creates ZERO outbound network connections
+// API-level verification: ensure MockMikroTikAdapter triggers zero Node.js outbound socket/HTTP calls
+// (Note: this is an API-level check, not an OS-level firewall/container egress test.)
 {
   const outboundCalls = [];
   const origConnect = net.Socket.prototype.connect;
@@ -565,7 +566,7 @@ try {
   // Test 12: Verify routeros scripts were not modified and no .env secrets exist in repo
   assert.equal(fs.existsSync(path.join(root, 'deployment', '.env')), false);
 
-  console.log('ALL IN-MEMORY APPLICATION & NETWORK-ISOLATION TESTS PASSED');
+  console.log('ALL IN-MEMORY APPLICATION & API-LEVEL NETWORK-ISOLATION TESTS PASSED');
 } finally {
   server.closeAllConnections?.();
   server.close();

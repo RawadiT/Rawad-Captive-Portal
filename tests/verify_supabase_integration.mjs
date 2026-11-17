@@ -20,20 +20,20 @@ if (
   throw new Error(`ABORT: Refusing to run integration test against non-local URL: ${supabaseUrl}`);
 }
 
-// Check if local PostgREST gateway is reachable
+// Check if local PostgREST gateway is reachable (FAIL CLOSED by default)
 try {
   const probe = await fetch(`${supabaseUrl}/rest/v1/`, { method: 'GET' });
   if (!probe.ok && probe.status !== 401 && probe.status !== 404) {
     throw new Error(`Unexpected status ${probe.status}`);
   }
 } catch (err) {
-  const msg = `NOT TESTED: Local PostgreSQL/PostgREST test service is not running at ${supabaseUrl} (${err instanceof Error ? err.message : err}).`;
-  if (process.env.REQUIRE_LOCAL_SUPABASE === 'true') {
-    console.error(msg);
-    process.exit(1);
-  }
-  console.log(msg);
-  process.exit(0);
+  console.error(
+    `FAIL-CLOSED: Local PostgreSQL/PostgREST test service is unavailable at ${supabaseUrl} (${err instanceof Error ? err.message : err}).`
+  );
+  console.error(
+    'Start the local stack first: docker compose -f deployment/docker-compose.field-test.yml up -d'
+  );
+  process.exit(1);
 }
 
 // Mint a local-only test service_role JWT matching deployment/docker-compose.field-test.yml PGRST_JWT_SECRET

@@ -1,4 +1,4 @@
-﻿# Builds a lean, production-only USB transfer package in ./usb-package
+# Builds a lean, production-only USB transfer package in ./usb-package
 $ErrorActionPreference = "Stop"
 $RootDir = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $OutDir = Join-Path $RootDir "usb-package"

@@ -1,13 +1,10 @@
-# PROGRESS.md — Harden Field-Test Isolation Before Approval
+# PROGRESS.md — Final Field-Test Verification Fixes
 
 **Branch:** `field-test-preparation`  
-**Baseline Commit:** `9db717cc99130f71e988dc12c1daa825b9a2ffc8`  
-**Status:** Hardened Field-Test Isolation Ready (Local Docker Supabase Integration NOT TESTED locally — Docker daemon offline)
+**Baseline Commit:** `4a540922ab9fa8f427071068c2c3cb8e52cebff7`  
+**Status:** Fail-Closed Verification Fixes Applied (Local Docker PostgreSQL+PostgREST Integration NOT EXECUTED locally — Docker daemon offline)
 
-- **H1:** `validateFieldTestIsolation()` now enforces loopback-only `HOST` (`127.0.0.1` / `localhost`) and rejects `0.0.0.0`, LAN, and public IPs.
-- **H2:** Added `RAWAD_FIELD_TEST_PACKAGE_LOCK=true` runtime check in `server.ts`, `field-test-preflight.mjs`, and `start-field-test.bat` / `start-windows.bat` in `build-usb-package.ps1` so the field-test USB package refuses any non-mock/non-loopback/production config.
-- **H3:** Added `deployment/docker-compose.field-test.yml` (local `postgres:16-alpine` + `postgrest` + `nginx` on `127.0.0.1:54321`) and `tests/verify_supabase_integration.mjs` using `SupabaseDatabaseClient`.
-- **H4:** Verified zero outbound network connections during `MockMikroTikAdapter` execution and loopback-only binding in `tests/verify_field_test.mjs`.
-- **Remaining Limitations:**
-  - `tests/verify_supabase_integration.mjs` is `NOT TESTED` locally because Docker Desktop Linux Engine daemon is not running on this host.
-  - Real MikroTik Lab & Production tests are `NOT RUN` per mandatory constraints.
+- **V1:** Updated `tests/verify_supabase_integration.mjs` to fail closed (`process.exit(1)`) by default when `http://127.0.0.1:54321` is unavailable.
+- **V2:** Updated `FIELD_TEST.md` with explicit `backend` build, `docker info`, and `docker compose ps` steps before running `tests/verify_supabase_integration.mjs`.
+- **V3:** Added `field_test_internal` (`internal: true`) network isolation to `deployment/docker-compose.field-test.yml` and clarified API-level vs container/OS-level isolation boundaries in `tests/verify_field_test.mjs` and `FIELD_TEST.md`.
+- **V4:** Verified Backend/Frontend builds, `tests/verify_field_test.mjs`, `docker compose config`, fail-closed `exit code 1` of `tests/verify_supabase_integration.mjs` when stopped, and USB package build + fail-safe preflight/smoke tests.

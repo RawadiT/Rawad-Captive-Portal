@@ -1,9 +1,17 @@
 # Reproducible Local PostgreSQL + PostgREST Environment for Field-Test Integration
-# Bound strictly to 127.0.0.1 (loopback only). NEVER use in production.
+# Bound strictly to 127.0.0.1 (loopback only). Internal DB/PostgREST network has no external egress.
+# NEVER use in production.
+
+networks:
+  field_test_internal:
+    internal: true
+  field_test_loopback:
 
 services:
   postgres:
     image: postgres:16-alpine
+    networks:
+      - field_test_internal
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: fieldtest_pg_pass
@@ -21,6 +29,8 @@ services:
 
   postgrest:
     image: postgrest/postgrest:v12.2.3
+    networks:
+      - field_test_internal
     depends_on:
       postgres:
         condition: service_healthy
@@ -32,6 +42,9 @@ services:
 
   supabase-local-gateway:
     image: nginx:alpine
+    networks:
+      - field_test_internal
+      - field_test_loopback
     depends_on:
       - postgrest
     ports:
