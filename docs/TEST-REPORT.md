@@ -1,59 +1,36 @@
-# تقرير الاختبارات والتحقق النهائي — نظام Captive Portal
+# تقرير الاختبارات والتحقق — نظام Captive Portal (النسخة النهائية)
 
-## 1. تصنيف الاختبارات (الشفافية الكاملة)
-1. **اختبارات الكود وقاعدة البيانات والأمان والتكامل (مُنفذة فعلياً محلياً).**
-2. **اختبارات RouterOS Mock (مُنفذة فعلياً عبر محاكي HotSpot Host Table & Active Table).**
-3. **اختبارات RouterOS الفعلية والنطاق الحقيقي (تتطلب MikroTik RB4011iGS+RM والنطاق الفعلي في الشركة ولم تُنفذ بعد وفق قاعدة المشروع).**
+## 1. ملخص الاختبارات المنفذة محلياً بعد التنظيف (17/17 ناجحاً)
 
----
-
-## 2. نتائج الاختبارات المنفذة محلياً — 29/29 اختباراً ناجحاً (0 فشل، 0 تخطي)
-
-> **تنبيه شفافية:** اختبارات `mikrotik-script-audit.test.mjs` تستخدم تحليلاً بنيوياً ومحاكاة محلية لترتيب قواعد RouterOS وRollback، ولا تغني بأي حال عن الاختبار الفعلي على جهاز MikroTik RB4011 الحقيقي.
+> **تنبيه شفافية:** الاختبارات المحلية استخدمت `MockDatabaseClient` (لمحاكاة Supabase RPC) و`MockMikroTikAdapter` و`mikrotik-script-audit` (التحليل البنيوي لسكربتات RouterOS). الاختبارات الفعلية على Supabase الحي وMikroTik RB4011 الحقيقي مؤجلة إلى وقت النشر في الشركة.
 
 | # | المجموعة | اسم الاختبار الفعلي | النتيجة |
 |---|---|---|---|
-| 1 | `device-compatibility` | `Local assets & offline readiness: no external CDN links in Guest Portal or HotSpot` | **نجاح** (`3.39ms`) |
-| 2 | `device-compatibility` | `RTL, viewport, and reduced-motion accessibility checks` | **نجاح** (`0.64ms`) |
-| 3 | `integration` | `Free 30-min lifecycle: grant, resume after disconnect, block 2nd grant same day, reset at 00:00 Baghdad` | **نجاح** (`42.19ms`) |
-| 4 | `integration` | `Session started before midnight Baghdad keeps original 30-min limit without extending or cutting` | **نجاح** (`37.03ms`) |
-| 5 | `integration` | `Concurrent free requests from same MAC only grant ONE quota` | **نجاح** (`38.94ms`) |
-| 6 | `integration` | `Backend restart persists consumed quota in SQLite` | **نجاح** (`58.18ms`) |
-| 7 | `integration` | `User login: cumulative quota (120m - 40m = 80m left), disabled, banned, unlimited, and terminate` | **نجاح** (`412.22ms`) |
-| 8 | `integration` | `Admin RBAC: regular admin cannot create/edit/disable super_admin, and audit logs are immutable` | **نجاح** (`89.08ms`) |
-| 9 | `performance` | `Performance: 50 concurrent guest grants & status checks complete within budget` (`189.8ms` للـ50 طلباً) | **نجاح** (`253.31ms`) |
-| 10 | `audit-regression` | `Audit 2: MAC/IP spoofing & unauthorized disconnect attempts are rejected (403)` | **نجاح** (`137.74ms`) |
-| 11 | `audit-regression` | `Audit 2b: Untrusted X-Forwarded-For cannot spoof client IP when trustProxy=false` | **نجاح** (`62.70ms`) |
-| 12 | `audit-regression` | `Audit 6: Session reconciliation on Wi-Fi drop & MikroTik reboot + orphan fail-closed sweep` | **نجاح** (`37.66ms`) |
-| 13 | `audit-regression` | `Audit 7: Database failure after MikroTik grant triggers compensating revoke (fail-closed)` | **نجاح** (`40.98ms`) |
-| 14 | `audit-regression` | `Audit 9: Production secrets validation rejects placeholders and insecure TLS settings` | **نجاح** (`0.52ms`) |
-| 15 | `audit-regression` | `Audit 1, 8, 10: Static verification of RouterOS safety, idempotency, IPv6 priority, Nginx isolation & pre-built Docker` | **نجاح** (`1.17ms`) |
-| 16 | `audit-regression` | `Audit CAPPORT: Unauthenticated and authenticated client CAPPORT API responses (RFC 8908)` | **نجاح** (`46.96ms`) |
-| 17 | `audit-regression` | `Audit CAPPORT IP Change: Same MAC with new IP in HotSpot Host Table retains active CAPPORT & status` | **نجاح** (`40.45ms`) |
-| 18 | `mikrotik-script-audit` | `RouterOS Structural Simulation: Forward chain allows Portal 443 BEFORE dropping Staff/Admin/Private/DNS` | **نجاح** (`3.19ms`) |
-| 19 | `mikrotik-script-audit` | `RouterOS Structural Simulation: Input chain allows Backend REST API & blocks Guest RouterOS Mgmt; IPv6 drops at top` | **نجاح** (`0.64ms`) |
-| 20 | `mikrotik-script-audit` | `RouterOS Security & Idempotency: API password gate, no password logging, and duplicate-free re-run` | **نجاح** (`0.91ms`) |
-| 21 | `mikrotik-script-audit` | `RouterOS Rollback: Full ownership checks & restoration of DNS, www-ssl, NTP, and Timezone` | **نجاح** (`0.96ms`) |
-| 22 | `mikrotik-script-audit` | `Docker Binding & Certificate Renewal Safety` | **نجاح** (`0.19ms`) |
-| 23 | `security` | `Security: Default Deny + MikroTik failure never grants internet or consumes quota` | **نجاح** (`38.70ms`) |
-| 24 | `security` | `Security: Admin endpoints reject unauthenticated requests (401) and enforce RBAC (403)` | **نجاح** (`266.77ms`) |
-| 25 | `simulation` | `End-to-End HTTP Simulation: Guest Free + Admin Dashboard + RFC 8908 Capport` | **نجاح** (`192.64ms`) |
-| 26 | `unit` | `Baghdad timezone date calculation rolls over at 00:00 Asia/Baghdad (21:00 UTC)` | **نجاح** (`1.87ms`) |
-| 27 | `unit` | `Password hashing uses scrypt with salt and timing-safe verification` | **نجاح** (`142.20ms`) |
-| 28 | `unit` | `Admin token signing, verification, and tamper rejection` | **نجاح** (`1.16ms`) |
-| 29 | `unit` | `MAC normalization and conservative device detection` | **نجاح** (`1.00ms`) |
+| 1 | `device-compatibility` | `Local assets, zero SQLite, and exact Guest UI button label` | **نجاح** (`2.53ms`) |
+| 2 | `device-compatibility` | `RTL, viewport, and reduced-motion accessibility checks` | **نجاح** (`1.16ms`) |
+| 3 | `integration` | `Free Access 1-8: 30m once per MAC, Wall-Clock countdown across disconnect, persistent after restart, different MAC is separate` | **نجاح** (`5.29ms`) |
+| 4 | `integration` | `Free Access 3: Concurrent requests for same MAC cannot grant two quotas` | **نجاح** (`0.41ms`) |
+| 5 | `integration` | `Account Tests 1-6: 120m starts on first login, Wall-Clock continues when disconnected, not tied to MAC, disable blocks` | **نجاح** (`167.06ms`) |
+| 6 | `performance` | `Performance: 50 concurrent guest grants complete within budget` (`124.4ms` للـ50 طلباً) | **نجاح** (`143.11ms`) |
+| 7 | `mikrotik-script-audit` | `RouterOS Scope: All .rsc scripts are strictly limited to ether10 (zero references to ether1-ether9)` | **نجاح** (`3.79ms`) |
+| 8 | `mikrotik-script-audit` | `RouterOS Structural Simulation: ether10 allows Portal 443 BEFORE dropping Admin/Private/DNS/IPv6` | **نجاح** (`1.25ms`) |
+| 9 | `mikrotik-script-audit` | `RouterOS Rollback, Idempotency & Password Gate` | **نجاح** (`0.85ms`) |
+| 10 | `mikrotik-script-audit` | `Docker, Nginx Admin Isolation & Certificate Renewal Safety` | **نجاح** (`0.17ms`) |
+| 11 | `security` | `Security: Default Deny, MikroTik failure & Supabase DB outage fail-closed behavior` | **نجاح** (`5.56ms`) |
+| 12 | `security` | `Security: MAC/IP spoofing, untrusted X-Forwarded-For & unauthenticated admin access rejected` | **نجاح** (`74.99ms`) |
+| 13 | `security` | `Security: Production config rejects missing Supabase keys, placeholders, .local & 0.0.0.0` | **نجاح** (`0.38ms`) |
+| 14 | `simulation` | `End-to-End HTTP Simulation: Health, CAPPORT, Free 30m, Admin User Create & Login` | **نجاح** (`183.40ms`) |
+| 15 | `unit` | `Password hashing uses scrypt with salt and timing-safe verification` | **نجاح** (`133.32ms`) |
+| 16 | `unit` | `Admin token signing, verification, and tamper rejection` | **نجاح** (`0.70ms`) |
+| 17 | `unit` | `MAC normalization and conservative device detection` | **نجاح** (`0.67ms`) |
 
-### نتائج بناء التطبيقات:
-- `backend` (`npm run build` / `tsc`): **نجاح**.
-- `frontend/guest-portal` (`npm run build`): **نجاح** (`110 kB` First Load JS).
-- `frontend/admin-dashboard` (`npm run build`): **نجاح** (`110 kB` First Load JS).
+### نتائج البناء بعد التنظيف:
+- `backend` (`tsc`): **نجاح**.
+- `frontend` (`next build`): **نجاح** (`/` 110 kB، `/admin` 109 kB).
 
 ---
 
-## 3. الاختبارات التي تتطلب النطاق الحقيقي وMikroTik RB4011 الفعلي والأجهزة الفعلية
-1. إصدار شهادة Let's Encrypt الفعلية عبر DNS-01 للنطاق الحقيقي للشركة، وفحص `CRL Distribution Points` الفعلية داخلها، واختبار `nginx -t` + `nginx -s reload` داخل حاوية Nginx الفعلية (ملاحظة: `openssl` و`nginx` غير مثبتين محلياً على جهاز التطوير الحالي).
-2. التحقق من وضع Access Point / Bridge على راوتر الضيوف وتمرير عناوين MAC الحقيقية إلى `ether10` وعزل Layer 2.
-3. تشغيل `/import preflight.rsc` للتأكد من عدم وجود تعارض Bridge أو IP مع `192.168.20.0/24`.
-4. اختبار العزل الفعلي في الشبكة (منع الضيوف من `ether9` و`192.168.0.0/16` ولوحة الإدارة `:8443` ومنافذ MikroTik، ومنع DNS الخارجي وIPv6) قبل المصادقة وبعدها.
-5. اختبار الاستعلام الفعلي لـ DHCP Option 114 (`https://<PORTAL_DOMAIN>/api/guest/capport`) والتحقق من سلوك CRL قبل المصادقة وظهور Captive Portal على أجهزة Android وiOS وWindows وmacOS.
-6. اختبار اتصال `RouterOSRestClient` الفعلي بـ `www-ssl` على المنفذ `443` مع `MIKROTIK_TLS_VERIFY=true`، واختبار `/import deploy.rsc` و`/import verify.rsc` و`/import rollback.rsc`.
+## 2. ما لم يُختبر محلياً ويحتاج التنفيذ في الشركة غداً
+1. الاتصال الفعلي بـ **Supabase PostgreSQL** وتنفيذ `supabase/schema.sql` واختبار `claim_free_quota` و`activate_user_on_first_login` على قاعدة البيانات الحية.
+2. تشغيل `/import preflight.rsc` و`/import deploy.rsc` و`/import verify.rsc` على **MikroTik RB4011iGS+RM** الحقيقي (`ether10`).
+3. التحقق الفعلي من فرض `session-timeout` عبر RouterOS v7 REST API عند انتهاء الـ 30 دقيقة أو انتهاء مدة الحساب، وتجديد الشهادة الفعلية للنطاق الحقيقي واختبار أجهزة الزبائن الفعلية.

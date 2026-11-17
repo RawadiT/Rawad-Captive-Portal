@@ -7,30 +7,21 @@ import type {
   RevokeHotspotAccessInput,
 } from './adapter.js';
 
-interface MockHotspotUser {
-  id: string;
-  username: string;
-  password: string;
-  macAddress: string;
-  limitUptimeSeconds: number | null;
-  profile: string;
-}
-
 interface MockActiveEntry {
   id: string;
   user: string;
   address: string;
   macAddress: string;
+  profile: string;
   startedAtMs: number;
-  limitUptimeSeconds: number | null;
+  sessionTimeoutSeconds: number;
 }
 
 export class MockMikroTikAdapter implements MikroTikAdapter {
   private connected = true;
   private simulateGrantFailure = false;
-  private simulateRevokeFailure = false;
   private hosts = new Map<string, ResolvedHotspotClient>();
-  private users = new Map<string, MockHotspotUser>();
+  private profiles = new Map<string, number>();
   private active = new Map<string, MockActiveEntry>();
   private counter = 1;
   private nowProvider: () => number;
@@ -47,39 +38,28 @@ export class MockMikroTikAdapter implements MikroTikAdapter {
     this.simulateGrantFailure = fail;
   }
 
-  setSimulateRevokeFailure(fail: boolean): void {
-    this.simulateRevokeFailure = fail;
-  }
-
   registerHost(ipAddress: string, macAddress: string): void {
-    const mac = macAddress.toUpperCase();
-    this.hosts.set(ipAddress, { ipAddress, macAddress: mac });
+    this.hosts.set(ipAddress, { ipAddress, macAddress: macAddress.toUpperCase() });
   }
 
   unregisterHost(ipAddress: string): void {
     this.hosts.delete(ipAddress);
   }
 
-  simulateActiveDrop(macAddress: string): void {
-    const mac = macAddress.toUpperCase();
-    for (const [key, entry] of this.active.entries()) {
-      if (entry.macAddress.toUpperCase() === mac) {
-        this.active.delete(key);
-      }
-    }
-  }
-
   simulateReboot(): void {
     this.active.clear();
+  }
+
+  getProfileSessionTimeout(profile: string): number | null {
+    return this.profiles.get(profile) ?? null;
   }
 
   isMacAuthorized(macAddress: string): boolean {
     const normalized = macAddress.toUpperCase();
     for (const entry of this.active.values()) {
       if (entry.macAddress.toUpperCase() === normalized) {
-        if (entry.limitUptimeSeconds === null) return true;
         const elapsed = Math.floor((this.nowProvider() - entry.startedAtMs) / 1000);
-        return elapsed < entry.limitUptimeSeconds;
+        return elapsed < entry.sessionTimeoutSeconds;
       }
     }
     return false;
@@ -107,6 +87,7 @@ export class MockMikroTikAdapter implements MikroTikAdapter {
 
     const normalizedMac = input.macAddress.toUpperCase();
     this.hosts.set(input.ipAddress, { ipAddress: input.ipAddress, macAddress: normalizedMac });
+    this.profiles.set(input.profile, input.sessionTimeoutSeconds);
 
     for (const [key, entry] of this.active.entries()) {
       if (entry.macAddress.toUpperCase() === normalizedMac || entry.user === input.username) {
@@ -115,33 +96,22 @@ export class MockMikroTikAdapter implements MikroTikAdapter {
     }
 
     const userId = `*U${this.counter++}`;
-    this.users.set(input.username, {
-      id: userId,
-      username: input.username,
-      password: input.password,
-      macAddress: normalizedMac,
-      limitUptimeSeconds: input.limitUptimeSeconds,
-      profile: input.profile,
-    });
-
     const activeId = `*A${this.counter++}`;
     this.active.set(activeId, {
       id: activeId,
       user: input.username,
       address: input.ipAddress,
       macAddress: normalizedMac,
+      profile: input.profile,
       startedAtMs: this.nowProvider(),
-      limitUptimeSeconds: input.limitUptimeSeconds,
+      sessionTimeoutSeconds: input.sessionTimeoutSeconds,
     });
 
-    return {
-      hotspotUserId: userId,
-      activeSessionId: activeId,
-    };
+    return { hotspotUserId: userId, activeSessionId: activeId };
   }
 
   async revokeHotspotAccess(input: RevokeHotspotAccessInput): Promise<void> {
-    if (!this.connected || this.simulateRevokeFailure) {
+    if (!this.connected) {
       throw new Error('MikroTik unreachable during revoke');
     }
 
@@ -154,7 +124,9 @@ export class MockMikroTikAdapter implements MikroTikAdapter {
         this.active.delete(key);
       }
     }
-    this.users.delete(input.username);
+    if (input.profile) {
+      this.profiles.delete(input.profile);
+    }
   }
 
   async listActiveSessions(): Promise<MikroTikActiveSession[]> {
@@ -167,13 +139,10 @@ export class MockMikroTikAdapter implements MikroTikAdapter {
 
     for (const [key, entry] of this.active.entries()) {
       const uptimeSeconds = Math.max(0, Math.floor((now - entry.startedAtMs) / 1000));
-      let left: number | null = null;
-      if (entry.limitUptimeSeconds !== null) {
-        left = Math.max(0, entry.limitUptimeSeconds - uptimeSeconds);
-        if (left === 0) {
-          this.active.delete(key);
-          continue;
-        }
+      const left = Math.max(0, entry.sessionTimeoutSeconds - uptimeSeconds);
+      if (left === 0) {
+        this.active.delete(key);
+        continue;
       }
       result.push({
         id: entry.id,

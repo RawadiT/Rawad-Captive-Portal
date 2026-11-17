@@ -1,55 +1,44 @@
 # ==============================================================================
-# RAWAD TECH CAPTIVE PORTAL — MIKROTIK ROUTEROS 7.x PRE-FLIGHT CHECK
-# READ-ONLY SCRIPT: Does NOT modify any router configuration.
+# RAWAD TECH CAPTIVE PORTAL — MIKROTIK ROUTEROS v7 PRE-FLIGHT CHECK
+# READ-ONLY SCRIPT — Scoped strictly to ether10 (does NOT inspect/modify ether1-ether9).
 # ==============================================================================
 
-:put "=== [1/9] RouterOS Version & Identity ==="
+:put "=== [1/8] RouterOS Version & Identity ==="
 /system identity print
 /system resource print
 
-:put "=== [2/9] Interface ether1 (WAN), ether9 (Staff), ether10 (Guest) ==="
-/interface ethernet print where name="ether1" || name="ether9" || name="ether10"
+:put "=== [2/8] Interface ether10 Status ==="
+/interface ethernet print where name="ether10"
 
-:put "=== [3/9] Bridge Port Membership Check (ABORT DEPLOY IF ether10 IS IN A BRIDGE) ==="
+:put "=== [3/8] Bridge Port Membership Check for ether10 ==="
 :local brCount [:len [/interface bridge port find where interface="ether10"]]
 :if ($brCount > 0) do={
     /interface bridge port print where interface="ether10"
-    :put "CONFLICT: ether10 is currently a member of a bridge! Human review required before deploy."
+    :put "CONFLICT: ether10 is currently in a bridge! Human review required before deploy."
 } else={
     :put "OK: ether10 is not in any bridge."
 }
 
-:put "=== [4/9] Existing IP Addresses & 192.168.20.0/24 Conflict Check ==="
-/ip address print
+:put "=== [4/8] 192.168.20.0/24 IP Conflict Check ==="
 :if ([:len [/ip address find where address~"192.168.20." && comment!="rawad-guest-portal"]] > 0) do={
-    :put "CONFLICT: Subnet 192.168.20.x is already in use by another rule! Human review required."
+    :put "CONFLICT: Subnet 192.168.20.x is already in use! Human review required."
 } else={
     :put "OK: No 192.168.20.x IP conflict detected."
 }
 
-:put "=== [5/9] Existing DHCP Servers, Pools & DNS ==="
-/ip pool print
-/ip dhcp-server print
-/ip dhcp-server network print
-/ip dns print
+:put "=== [5/8] Existing HotSpot & DHCP on ether10 ==="
+/ip dhcp-server print where interface="ether10"
+/ip hotspot print where interface="ether10"
 
-:put "=== [6/9] Existing HotSpot Configuration ==="
-/ip hotspot print
-/ip hotspot profile print
+:put "=== [6/8] Existing Firewall Rules referencing ether10 ==="
+/ip firewall filter print where in-interface="ether10" || out-interface="ether10"
+/ipv6 firewall filter print where in-interface="ether10"
 
-:put "=== [7/9] Existing Firewall Filter & NAT Rules ==="
-/ip firewall filter print
-/ip firewall nat print
-
-:put "=== [8/9] IPv6 Status & Firewall Rules ==="
-/ipv6 address print
-/ipv6 firewall filter print
-
-:put "=== [9/10] Certificates & www-ssl Service Status ==="
+:put "=== [7/8] Certificates & www-ssl Status ==="
 /certificate print
 /ip service print where name="www-ssl"
 
-:put "=== [10/10] System Clock & NTP Client Status (Required for TLS & Asia/Baghdad Reset) ==="
+:put "=== [8/8] System Clock & NTP Client ==="
 /system clock print
 /system ntp client print
 

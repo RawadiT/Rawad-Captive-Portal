@@ -1,6 +1,4 @@
 import crypto from 'node:crypto';
-import type { DatabaseSync } from 'node:sqlite';
-import type { AuditService } from '../audit-logs/auditService.js';
 import {
   ConflictError,
   ForbiddenError,
@@ -8,31 +6,33 @@ import {
   UnauthorizedError,
 } from '../authentication/adminService.js';
 import { hashPassword, verifyPassword } from '../authentication/password.js';
+import type { DatabaseClient } from '../db/client.js';
 import type { MikroTikAdapter } from '../mikrotik/adapter.js';
-import type { AdminRole, PublicUser, SessionRecord, UserRecord, UserStatus } from '../types/index.js';
-import { getBaghdadDateString, getNextBaghdadMidnightIso } from './baghdadTime.js';
-import { detectDeviceFromUserAgent, normalizeMac } from './macUtils.js';
+import type { FreeQuotaRecord, PublicUser, SessionRecord, UserRecord } from '../types/index.js';
+import { normalizeMac } from './macUtils.js';
 
 export interface QuotaServiceConfig {
   freeQuotaSeconds: number;
-  profileFree: string;
-  profileUser: string;
   nowProvider?: () => Date;
 }
 
-function toPublicUser(u: UserRecord): PublicUser {
-  const remaining =
-    u.quota_seconds === null ? null : Math.max(0, u.quota_seconds - u.used_seconds);
+function toPublicUser(u: UserRecord, nowMs: number): PublicUser {
+  let remainingSeconds: number | null = u.duration_minutes * 60;
+  let isExpired = false;
+  if (u.expires_at) {
+    remainingSeconds = Math.max(0, Math.floor((Date.parse(u.expires_at) - nowMs) / 1000));
+    isExpired = remainingSeconds === 0;
+  }
   return {
     id: u.id,
     username: u.username,
-    display_name: u.display_name,
-    quota_seconds: u.quota_seconds,
-    used_seconds: u.used_seconds,
-    remaining_seconds: remaining,
-    status: u.status,
+    duration_minutes: u.duration_minutes,
+    started_at: u.started_at,
+    expires_at: u.expires_at,
+    remaining_seconds: remainingSeconds,
+    is_disabled: u.is_disabled,
+    is_expired: isExpired,
     created_at: u.created_at,
-    updated_at: u.updated_at,
   };
 }
 
@@ -41,25 +41,11 @@ export class QuotaService {
   private readonly now: () => Date;
 
   constructor(
-    private readonly db: DatabaseSync,
+    private readonly db: DatabaseClient,
     private readonly mikrotik: MikroTikAdapter,
-    private readonly audit: AuditService,
     private readonly cfg: QuotaServiceConfig
   ) {
     this.now = cfg.nowProvider ?? (() => new Date());
-  }
-
-  private async revokeWithRetry(username: string, macAddress: string, attempts = 3): Promise<void> {
-    for (let i = 0; i < attempts; i++) {
-      try {
-        await this.mikrotik.revokeHotspotAccess({ username, macAddress });
-        return;
-      } catch {
-        if (i < attempts - 1) {
-          await new Promise((r) => setTimeout(r, 150 * (i + 1)));
-        }
-      }
-    }
   }
 
   private async withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
@@ -75,194 +61,127 @@ export class QuotaService {
     }
   }
 
-  getActiveSessionByMac(macAddress: string): SessionRecord | null {
-    const mac = normalizeMac(macAddress);
-    const row = this.db
-      .prepare("SELECT * FROM sessions WHERE mac_address = ? AND status = 'active' ORDER BY started_at DESC LIMIT 1")
-      .get(mac) as SessionRecord | undefined;
-    return row ?? null;
+  private async revokeWithRetry(
+    username: string,
+    macAddress: string,
+    profile: string,
+    attempts = 3
+  ): Promise<void> {
+    for (let i = 0; i < attempts; i++) {
+      try {
+        await this.mikrotik.revokeHotspotAccess({ username, macAddress, profile });
+        return;
+      } catch {
+        if (i < attempts - 1) {
+          await new Promise((r) => setTimeout(r, 150 * (i + 1)));
+        }
+      }
+    }
   }
 
-  getFreeEligibility(macAddress: string): {
-    eligible: boolean;
-    reason: string | null;
-    baghdadDate: string;
-    nextResetAt: string;
-    activeSession: SessionRecord | null;
-  } {
+  async getGuestStatus(macAddress: string): Promise<{
+    connected: boolean;
+    session: SessionRecord | null;
+    remainingSeconds: number | null;
+    freeEligible: boolean;
+    freeReason: string | null;
+  }> {
     const mac = normalizeMac(macAddress);
-    const current = this.now();
-    const baghdadDate = getBaghdadDateString(current);
-    const nextResetAt = getNextBaghdadMidnightIso(current);
+    const nowMs = this.now().getTime();
+    const active = await this.db.getActiveSessionByMac(mac);
 
-    const activeSession = this.getActiveSessionByMac(mac);
-    if (activeSession) {
+    if (active) {
+      const rem = Math.max(0, Math.floor((Date.parse(active.expires_at) - nowMs) / 1000));
+      if (rem > 0) {
+        return {
+          connected: true,
+          session: active,
+          remainingSeconds: rem,
+          freeEligible: false,
+          freeReason: 'لديك جلسة نشطة حالياً',
+        };
+      }
+    }
+
+    const quota = await this.db.getFreeQuota(mac);
+    if (!quota) {
       return {
-        eligible: false,
-        reason: 'لديك جلسة نشطة حالياً',
-        baghdadDate,
-        nextResetAt,
-        activeSession,
+        connected: false,
+        session: null,
+        remainingSeconds: null,
+        freeEligible: true,
+        freeReason: null,
       };
     }
 
-    const usedToday = this.db
-      .prepare('SELECT id FROM free_quotas WHERE mac_address = ? AND baghdad_date = ?')
-      .get(mac, baghdadDate) as { id: string } | undefined;
-
-    if (usedToday) {
+    const rem = Math.max(0, Math.floor((Date.parse(quota.expires_at) - nowMs) / 1000));
+    if (rem > 0) {
       return {
-        eligible: false,
-        reason: 'تم استهلاك الحصة المجانية (30 دقيقة) لهذا اليوم. تتجدد عند الساعة 00:00 بتوقيت بغداد.',
-        baghdadDate,
-        nextResetAt,
-        activeSession: null,
+        connected: false,
+        session: null,
+        remainingSeconds: rem,
+        freeEligible: true,
+        freeReason: null,
       };
     }
 
     return {
-      eligible: true,
-      reason: null,
-      baghdadDate,
-      nextResetAt,
-      activeSession: null,
+      connected: false,
+      session: null,
+      remainingSeconds: 0,
+      freeEligible: false,
+      freeReason: 'تم استهلاك الحصة المجانية (30 دقيقة) لهذا الجهاز مسبقاً.',
     };
   }
 
   async grantFreeAccess(input: {
     macAddress: string;
     ipAddress: string;
-    userAgent?: string | null;
   }): Promise<{ session: SessionRecord; remainingSeconds: number; resumed: boolean }> {
     const mac = normalizeMac(input.macAddress);
 
     return this.withLock(`mac:${mac}`, async () => {
-      const current = this.now();
-      const nowIso = current.toISOString();
-      const baghdadDate = getBaghdadDateString(current);
-
-      // 1. Check if device already has an active session (e.g., reconnect / page refresh)
-      const active = this.getActiveSessionByMac(mac);
-      if (active) {
-        const remaining =
-          active.allowed_seconds === null
-            ? this.cfg.freeQuotaSeconds
-            : Math.max(0, active.allowed_seconds - active.consumed_seconds);
-        if (remaining > 0) {
-          return { session: active, remainingSeconds: remaining, resumed: true };
-        }
+      const claim = await this.db.claimFreeQuota(mac, this.cfg.freeQuotaSeconds);
+      if (!claim.allowed || claim.remaining_seconds <= 0) {
+        throw new ForbiddenError('تم استهلاك الحصة المجانية (30 دقيقة) لهذا الجهاز مسبقاً.');
       }
 
-      // 2. Check if device had a paused/disconnected free session from today with remaining time
-      const pausedToday = this.db
-        .prepare(
-          `SELECT * FROM sessions
-           WHERE mac_address = ? AND session_type = 'free' AND baghdad_date = ? AND status = 'disconnected'
-           ORDER BY started_at DESC LIMIT 1`
-        )
-        .get(mac, baghdadDate) as SessionRecord | undefined;
-
-      if (pausedToday && pausedToday.allowed_seconds !== null) {
-        const remaining = pausedToday.allowed_seconds - pausedToday.consumed_seconds;
-        if (remaining > 0) {
-          const hotspotPassword = crypto.randomBytes(12).toString('hex');
-          await this.mikrotik.grantHotspotAccess({
-            username: pausedToday.hotspot_username,
-            password: hotspotPassword,
-            macAddress: mac,
-            ipAddress: input.ipAddress,
-            limitUptimeSeconds: remaining,
-            profile: this.cfg.profileFree,
-          });
-
-          const newExpiresAt = new Date(current.getTime() + remaining * 1000).toISOString();
-          this.db
-            .prepare(
-              `UPDATE sessions SET status = 'active', ip_address = ?, last_synced_at = ?, expires_at = ?, ended_at = NULL, end_reason = NULL WHERE id = ?`
-            )
-            .run(input.ipAddress, nowIso, newExpiresAt, pausedToday.id);
-
-          const updated = this.db
-            .prepare('SELECT * FROM sessions WHERE id = ?')
-            .get(pausedToday.id) as unknown as SessionRecord;
-          return { session: updated, remainingSeconds: remaining, resumed: true };
-        }
-      }
-
-      // 3. Verify daily eligibility in Asia/Baghdad
-      const alreadyUsed = this.db
-        .prepare('SELECT id FROM free_quotas WHERE mac_address = ? AND baghdad_date = ?')
-        .get(mac, baghdadDate) as { id: string } | undefined;
-
-      if (alreadyUsed) {
-        throw new ForbiddenError(
-          'تم استهلاك الحصة المجانية (30 دقيقة) لهذا اليوم. تتجدد عند الساعة 00:00 بتوقيت بغداد.'
-        );
-      }
-
-      // 4. Provision on MikroTik FIRST; if this fails, quota is NOT marked used
-      const sessionId = crypto.randomUUID();
-      const hotspotUsername = `free-${mac.replace(/:/g, '').toLowerCase()}-${baghdadDate.replace(/-/g, '')}`;
+      const cleanMac = mac.replace(/:/g, '').toLowerCase();
+      const hotspotUsername = `free-${cleanMac}`;
+      const hotspotProfile = `rawad-sess-free-${cleanMac}`;
       const hotspotPassword = crypto.randomBytes(12).toString('hex');
-      const allowedSeconds = this.cfg.freeQuotaSeconds;
-      const expiresAt = new Date(current.getTime() + allowedSeconds * 1000).toISOString();
-      const device = detectDeviceFromUserAgent(input.userAgent);
 
       await this.mikrotik.grantHotspotAccess({
         username: hotspotUsername,
         password: hotspotPassword,
         macAddress: mac,
         ipAddress: input.ipAddress,
-        limitUptimeSeconds: allowedSeconds,
-        profile: this.cfg.profileFree,
+        sessionTimeoutSeconds: claim.remaining_seconds,
+        profile: hotspotProfile,
       });
 
-      // 5. Atomically persist session + free_quotas record
-      this.db.exec('BEGIN IMMEDIATE;');
       try {
-        this.db
-          .prepare(
-            `INSERT INTO sessions (
-              id, session_type, user_id, mac_address, ip_address,
-              device_name, device_type, device_model, hotspot_username,
-              status, allowed_seconds, consumed_seconds, baghdad_date,
-              started_at, last_synced_at, expires_at
-            ) VALUES (?, 'free', NULL, ?, ?, ?, ?, ?, ?, 'active', ?, 0, ?, ?, ?, ?)`
-          )
-          .run(
-            sessionId,
-            mac,
-            input.ipAddress,
-            device.deviceName,
-            device.deviceType,
-            device.deviceModel,
-            hotspotUsername,
-            allowedSeconds,
-            baghdadDate,
-            nowIso,
-            nowIso,
-            expiresAt
-          );
+        const session = await this.db.createSession({
+          session_type: 'free',
+          user_id: null,
+          mac_address: mac,
+          ip_address: input.ipAddress,
+          hotspot_username: hotspotUsername,
+          hotspot_profile: hotspotProfile,
+          started_at: claim.started_at,
+          expires_at: claim.expires_at,
+          status: 'active',
+        });
 
-        this.db
-          .prepare(
-            `INSERT INTO free_quotas (id, mac_address, baghdad_date, granted_at, session_id)
-             VALUES (?, ?, ?, ?, ?)`
-          )
-          .run(crypto.randomUUID(), mac, baghdadDate, nowIso, sessionId);
-
-        this.db.exec('COMMIT;');
+        return {
+          session,
+          remainingSeconds: claim.remaining_seconds,
+          resumed: !claim.is_new,
+        };
       } catch (err) {
-        this.db.exec('ROLLBACK;');
-        await this.revokeWithRetry(hotspotUsername, mac);
+        await this.revokeWithRetry(hotspotUsername, mac, hotspotProfile);
         throw err;
       }
-
-      const created = this.db
-        .prepare('SELECT * FROM sessions WHERE id = ?')
-        .get(sessionId) as unknown as SessionRecord;
-
-      return { session: created, remainingSeconds: allowedSeconds, resumed: false };
     });
   }
 
@@ -271,58 +190,40 @@ export class QuotaService {
     password: string;
     macAddress: string;
     ipAddress: string;
-    userAgent?: string | null;
-  }): Promise<{ session: SessionRecord; user: PublicUser; remainingSeconds: number | null }> {
+  }): Promise<{ session: SessionRecord; user: PublicUser; remainingSeconds: number }> {
     const cleanUsername = input.username.trim();
     const mac = normalizeMac(input.macAddress);
 
     return this.withLock(`user:${cleanUsername.toLowerCase()}`, async () => {
-      const user = this.db
-        .prepare('SELECT * FROM users WHERE username = ?')
-        .get(cleanUsername) as UserRecord | undefined;
-
+      const user = await this.db.getUserByUsername(cleanUsername);
       if (!user || !verifyPassword(input.password, user.password_hash)) {
         throw new UnauthorizedError('اسم المستخدم أو كلمة المرور غير صحيحة');
       }
-      if (user.status === 'banned') {
-        throw new ForbiddenError('تم حظر هذا الحساب من قبل الإدارة');
-      }
-      if (user.status === 'disabled') {
+      if (user.is_disabled) {
         throw new ForbiddenError('هذا الحساب معطل حالياً');
       }
 
-      const remainingSeconds =
-        user.quota_seconds === null ? null : Math.max(0, user.quota_seconds - user.used_seconds);
-
-      if (remainingSeconds !== null && remainingSeconds <= 0) {
-        if (user.status !== 'expired') {
-          this.db
-            .prepare("UPDATE users SET status = 'expired', updated_at = ? WHERE id = ?")
-            .run(this.now().toISOString(), user.id);
-        }
-        throw new ForbiddenError('انتهت مدة استخدام هذا الحساب');
+      // Atomically set started_at & expires_at on FIRST successful login (Wall-Clock UTC)
+      const activated = await this.db.activateUserOnFirstLogin(user.id);
+      if (!activated || activated.remaining_seconds <= 0) {
+        throw new ForbiddenError('انتهت صلاحية هذا الحساب');
       }
 
-      // Close any existing active session for this MAC or user before starting the new one
-      const existingActive = this.db
-        .prepare("SELECT * FROM sessions WHERE (mac_address = ? OR user_id = ?) AND status = 'active'")
-        .all(mac, user.id) as unknown as SessionRecord[];
-
-      const current = this.now();
-      const nowIso = current.toISOString();
-
-      for (const old of existingActive) {
+      // Close any existing active session for this MAC
+      const existingActive = await this.db.getActiveSessionByMac(mac);
+      if (existingActive) {
         await this.mikrotik
-          .revokeHotspotAccess({ username: old.hotspot_username, macAddress: old.mac_address })
+          .revokeHotspotAccess({
+            username: existingActive.hotspot_username,
+            macAddress: existingActive.mac_address,
+            profile: existingActive.hotspot_profile,
+          })
           .catch(() => {});
-        this.db
-          .prepare(
-            "UPDATE sessions SET status = 'disconnected', ended_at = ?, end_reason = 'superseded' WHERE id = ?"
-          )
-          .run(nowIso, old.id);
+        await this.db.updateSessionStatus(existingActive.id, 'disconnected');
       }
 
       const hotspotUsername = `usr-${user.username}`;
+      const hotspotProfile = `rawad-sess-usr-${user.id.slice(0, 8)}`;
       const hotspotPassword = crypto.randomBytes(12).toString('hex');
 
       await this.mikrotik.grantHotspotAccess({
@@ -330,235 +231,101 @@ export class QuotaService {
         password: hotspotPassword,
         macAddress: mac,
         ipAddress: input.ipAddress,
-        limitUptimeSeconds: remainingSeconds,
-        profile: this.cfg.profileUser,
+        sessionTimeoutSeconds: activated.remaining_seconds,
+        profile: hotspotProfile,
       });
 
-      const sessionId = crypto.randomUUID();
-      const baghdadDate = getBaghdadDateString(current);
-      const expiresAt =
-        remainingSeconds !== null ? new Date(current.getTime() + remainingSeconds * 1000).toISOString() : null;
-      const device = detectDeviceFromUserAgent(input.userAgent);
-
       try {
-        this.db
-          .prepare(
-            `INSERT INTO sessions (
-              id, session_type, user_id, mac_address, ip_address,
-              device_name, device_type, device_model, hotspot_username,
-              status, allowed_seconds, consumed_seconds, baghdad_date,
-              started_at, last_synced_at, expires_at
-            ) VALUES (?, 'user', ?, ?, ?, ?, ?, ?, ?, 'active', ?, 0, ?, ?, ?, ?)`
-          )
-          .run(
-            sessionId,
-            user.id,
-            mac,
-            input.ipAddress,
-            device.deviceName,
-            device.deviceType,
-            device.deviceModel,
-            hotspotUsername,
-            remainingSeconds,
-            baghdadDate,
-            nowIso,
-            nowIso,
-            expiresAt
-          );
+        const session = await this.db.createSession({
+          session_type: 'user',
+          user_id: user.id,
+          mac_address: mac,
+          ip_address: input.ipAddress,
+          hotspot_username: hotspotUsername,
+          hotspot_profile: hotspotProfile,
+          started_at: activated.started_at,
+          expires_at: activated.expires_at,
+          status: 'active',
+        });
+
+        const updatedUser: UserRecord = {
+          ...user,
+          started_at: activated.started_at,
+          expires_at: activated.expires_at,
+        };
+
+        return {
+          session,
+          user: toPublicUser(updatedUser, this.now().getTime()),
+          remainingSeconds: activated.remaining_seconds,
+        };
       } catch (err) {
-        await this.revokeWithRetry(hotspotUsername, mac);
+        await this.revokeWithRetry(hotspotUsername, mac, hotspotProfile);
         throw err;
       }
-
-      const session = this.db
-        .prepare('SELECT * FROM sessions WHERE id = ?')
-        .get(sessionId) as unknown as SessionRecord;
-
-      return {
-        session,
-        user: toPublicUser(user),
-        remainingSeconds,
-      };
     });
   }
 
-  listUsers(): PublicUser[] {
-    const rows = this.db
-      .prepare('SELECT * FROM users ORDER BY created_at DESC')
-      .all() as unknown as UserRecord[];
-    return rows.map(toPublicUser);
+  async listUsers(): Promise<PublicUser[]> {
+    const rows = await this.db.listUsers();
+    const nowMs = this.now().getTime();
+    return rows.map((u) => toPublicUser(u, nowMs));
   }
 
-  createUser(
-    actor: { id: string; username: string; role: AdminRole },
-    input: {
-      username: string;
-      password: string;
-      display_name?: string | null;
-      quota_minutes?: number | null;
-    },
-    ipAddress: string
-  ): PublicUser {
+  async createUser(input: {
+    username: string;
+    password: string;
+    duration_minutes: number;
+  }): Promise<PublicUser> {
     const cleanUsername = input.username.trim();
     if (!cleanUsername) throw new Error('اسم المستخدم مطلوب');
-
-    const exists = this.db.prepare('SELECT id FROM users WHERE username = ?').get(cleanUsername);
-    if (exists) throw new ConflictError('اسم المستخدم موجود مسبقاً');
-
-    const quotaSeconds =
-      input.quota_minutes === null || input.quota_minutes === undefined
-        ? null
-        : Math.max(60, Math.floor(input.quota_minutes * 60));
-
-    const id = crypto.randomUUID();
-    const nowIso = this.now().toISOString();
-
-    this.db
-      .prepare(
-        `INSERT INTO users (id, username, password_hash, display_name, quota_seconds, used_seconds, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 0, 'active', ?, ?)`
-      )
-      .run(
-        id,
-        cleanUsername,
-        hashPassword(input.password),
-        input.display_name?.trim() || null,
-        quotaSeconds,
-        nowIso,
-        nowIso
-      );
-
-    const created = toPublicUser(
-      this.db.prepare('SELECT * FROM users WHERE id = ?').get(id) as unknown as UserRecord
-    );
-
-    this.audit.record({
-      adminId: actor.id,
-      adminUsername: actor.username,
-      action: 'USER_CREATE',
-      targetType: 'user',
-      targetId: id,
-      targetLabel: cleanUsername,
-      ipAddress,
-      newValue: created,
-    });
-
-    return created;
-  }
-
-  async updateUser(
-    actor: { id: string; username: string; role: AdminRole },
-    userId: string,
-    input: {
-      display_name?: string | null;
-      password?: string;
-      quota_minutes?: number | null;
-      status?: UserStatus;
-    },
-    ipAddress: string
-  ): Promise<PublicUser> {
-    const existing = this.db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as UserRecord | undefined;
-    if (!existing) throw new NotFoundError('المستخدم غير موجود');
-
-    const prevPub = toPublicUser(existing);
-    const nextDisplay =
-      input.display_name !== undefined ? input.display_name?.trim() || null : existing.display_name;
-    const nextHash = input.password ? hashPassword(input.password) : existing.password_hash;
-    const nextQuotaSeconds =
-      input.quota_minutes === undefined
-        ? existing.quota_seconds
-        : input.quota_minutes === null
-          ? null
-          : Math.max(60, Math.floor(input.quota_minutes * 60));
-
-    let nextStatus: UserStatus = input.status ?? existing.status;
-    if (
-      nextQuotaSeconds !== null &&
-      existing.used_seconds < nextQuotaSeconds &&
-      existing.status === 'expired' &&
-      input.status === undefined
-    ) {
-      nextStatus = 'active';
+    if (!Number.isFinite(input.duration_minutes) || input.duration_minutes < 1) {
+      throw new Error('مدة الحساب يجب أن تكون دقيقة واحدة على الأقل');
     }
 
-    const nowIso = this.now().toISOString();
-    this.db
-      .prepare(
-        `UPDATE users SET display_name = ?, password_hash = ?, quota_seconds = ?, status = ?, updated_at = ? WHERE id = ?`
-      )
-      .run(nextDisplay, nextHash, nextQuotaSeconds, nextStatus, nowIso, userId);
+    const existing = await this.db.getUserByUsername(cleanUsername);
+    if (existing) throw new ConflictError('اسم المستخدم موجود مسبقاً');
 
-    // If user was disabled or banned, immediately revoke active sessions on MikroTik
-    if (nextStatus === 'disabled' || nextStatus === 'banned') {
-      const actives = this.db
-        .prepare("SELECT * FROM sessions WHERE user_id = ? AND status = 'active'")
-        .all(userId) as unknown as SessionRecord[];
+    const created = await this.db.createUser({
+      username: cleanUsername,
+      password_hash: hashPassword(input.password),
+      duration_minutes: Math.floor(input.duration_minutes),
+    });
+
+    return toPublicUser(created, this.now().getTime());
+  }
+
+  async setUserDisabled(userId: string, isDisabled: boolean): Promise<PublicUser> {
+    const updated = await this.db.setUserDisabled(userId, isDisabled);
+    if (!updated) throw new NotFoundError('الحساب غير موجود');
+
+    if (isDisabled) {
+      const actives = await this.db.listActiveSessionsByUserId(userId);
       for (const s of actives) {
         await this.mikrotik
-          .revokeHotspotAccess({ username: s.hotspot_username, macAddress: s.mac_address })
+          .revokeHotspotAccess({
+            username: s.hotspot_username,
+            macAddress: s.mac_address,
+            profile: s.hotspot_profile,
+          })
           .catch(() => {});
-        this.db
-          .prepare("UPDATE sessions SET status = 'terminated', ended_at = ?, end_reason = ? WHERE id = ?")
-          .run(nowIso, `user_${nextStatus}`, s.id);
+        await this.db.updateSessionStatus(s.id, 'disconnected');
       }
     }
 
-    const updated = toPublicUser(
-      this.db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as unknown as UserRecord
-    );
-
-    const action = nextStatus === 'banned' && existing.status !== 'banned' ? 'USER_BAN' : 'USER_UPDATE';
-    this.audit.record({
-      adminId: actor.id,
-      adminUsername: actor.username,
-      action,
-      targetType: 'user',
-      targetId: userId,
-      targetLabel: existing.username,
-      ipAddress,
-      previousValue: prevPub,
-      newValue: updated,
-    });
-
-    return updated;
+    return toPublicUser(updated, this.now().getTime());
   }
 
-  async deleteUser(
-    actor: { id: string; username: string; role: AdminRole },
-    userId: string,
-    ipAddress: string
-  ): Promise<void> {
-    const existing = this.db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as UserRecord | undefined;
-    if (!existing) throw new NotFoundError('المستخدم غير موجود');
-
-    const prevPub = toPublicUser(existing);
-    const nowIso = this.now().toISOString();
-
-    const actives = this.db
-      .prepare("SELECT * FROM sessions WHERE user_id = ? AND status = 'active'")
-      .all(userId) as unknown as SessionRecord[];
-
-    for (const s of actives) {
-      await this.mikrotik
-        .revokeHotspotAccess({ username: s.hotspot_username, macAddress: s.mac_address })
-        .catch(() => {});
-      this.db
-        .prepare("UPDATE sessions SET status = 'terminated', ended_at = ?, end_reason = 'user_deleted' WHERE id = ?")
-        .run(nowIso, s.id);
-    }
-
-    // Preserve historical session & audit_logs integrity (sessions.user_id ON DELETE SET NULL)
-    this.db.prepare('DELETE FROM users WHERE id = ?').run(userId);
-
-    this.audit.record({
-      adminId: actor.id,
-      adminUsername: actor.username,
-      action: 'USER_DELETE',
-      targetType: 'user',
-      targetId: userId,
-      targetLabel: existing.username,
-      ipAddress,
-      previousValue: prevPub,
+  async listFreeQuotas(): Promise<Array<FreeQuotaRecord & { remaining_seconds: number; is_expired: boolean }>> {
+    const rows = await this.db.listFreeQuotas();
+    const nowMs = this.now().getTime();
+    return rows.map((q) => {
+      const rem = Math.max(0, Math.floor((Date.parse(q.expires_at) - nowMs) / 1000));
+      return {
+        ...q,
+        remaining_seconds: rem,
+        is_expired: rem === 0,
+      };
     });
   }
 }

@@ -1,36 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import path from 'node:path';
-import { openDatabase } from '../../backend/dist/config/db.js';
-import { AuditService } from '../../backend/dist/audit-logs/auditService.js';
+import { MockDatabaseClient } from '../../backend/dist/db/mockDbClient.js';
 import { AdminService } from '../../backend/dist/authentication/adminService.js';
 import { MockMikroTikAdapter } from '../../backend/dist/mikrotik/mockAdapter.js';
 import { QuotaService } from '../../backend/dist/quota-manager/quotaService.js';
 import { SessionMonitor } from '../../backend/dist/session-monitor/sessionMonitor.js';
 import { createApp } from '../../backend/dist/api/app.js';
 
-const SCHEMA_DIR = path.resolve(process.cwd(), 'database', 'schema');
-
-test('End-to-End HTTP Simulation: Guest Free + Admin Dashboard + RFC 8908 Capport', async () => {
-  const db = openDatabase(':memory:', SCHEMA_DIR);
-  const audit = new AuditService(db);
-  const adminService = new AdminService(db, audit, 'sim-secret');
-  adminService.ensureDefaultSuperAdmin('superadmin', 'SuperPass123!');
+test('End-to-End HTTP Simulation: Health, CAPPORT, Free 30m, Admin User Create & Login', async () => {
+  const db = new MockDatabaseClient();
+  const adminService = new AdminService(db, 'sim-secret-32-chars-minimum-length');
+  await adminService.ensureDefaultAdmin('admin', 'StrongAdminPass99!');
   const mikrotik = new MockMikroTikAdapter();
-  const quota = new QuotaService(db, mikrotik, audit, {
-    freeQuotaSeconds: 1800,
-    profileFree: 'rawad-free-30m',
-    profileUser: 'rawad-user',
-  });
-  const monitor = new SessionMonitor(db, mikrotik, audit);
+  const quota = new QuotaService(db, mikrotik, { freeQuotaSeconds: 1800 });
+  const monitor = new SessionMonitor(db, mikrotik);
   const app = createApp({
     config: {
       nodeEnv: 'test',
       port: 0,
       host: '127.0.0.1',
-      databasePath: ':memory:',
-      schemaDir: SCHEMA_DIR,
-      tokenSecret: 'sim-secret',
+      supabaseUrl: 'https://test.supabase.co',
+      supabaseServiceRoleKey: 'test-key',
+      tokenSecret: 'sim-secret-32-chars-minimum-length',
       mikrotikMode: 'mock',
       mikrotikHost: '192.168.20.1',
       mikrotikPort: 443,
@@ -39,41 +30,36 @@ test('End-to-End HTTP Simulation: Guest Free + Admin Dashboard + RFC 8908 Cappor
       mikrotikTlsRejectUnauthorized: true,
       mikrotikCaCertPath: null,
       mikrotikHotspotServer: 'rawad-guest-hotspot',
-      mikrotikProfileFree: 'rawad-free-30m',
-      mikrotikProfileUser: 'rawad-user',
       freeQuotaSeconds: 1800,
       sessionSyncIntervalMs: 5000,
       guestPortalOrigin: 'https://wifi.rawad-tech.example',
-      adminDashboardOrigin: 'http://127.0.0.1:3001',
-      defaultSuperAdminUsername: 'superadmin',
-      defaultSuperAdminPassword: 'SuperPass123!',
+      adminDashboardOrigin: 'https://127.0.0.1:8443',
+      defaultAdminUsername: 'admin',
+      defaultAdminPassword: 'StrongAdminPass99!',
       trustProxy: true,
       allowDevMacFallback: false,
     },
+    db,
     adminService,
     quotaService: quota,
     sessionMonitor: monitor,
-    auditService: audit,
     mikrotik,
   });
 
   const server = app.listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));
-  const { port } = server.address();
-  const base = `http://127.0.0.1:${port}`;
+  const base = `http://127.0.0.1:${server.address().port}`;
 
   try {
-    const mac = '00:11:22:33:44:55';
-    const ip = '192.168.20.99';
-    mikrotik.registerHost(ip, mac);
+    const health = await fetch(`${base}/api/health`).then((r) => r.json());
+    assert.equal(health.ok, true);
 
-    // 1. Capport before login (no ?mac= param!) -> captive: true
-    const capBefore = await fetch(`${base}/api/guest/capport`, {
-      headers: { 'x-real-ip': ip },
-    }).then((r) => r.json());
+    const ip = '192.168.20.99';
+    mikrotik.registerHost(ip, '00:11:22:33:44:55');
+
+    const capBefore = await fetch(`${base}/api/guest/capport`, { headers: { 'x-real-ip': ip } }).then((r) => r.json());
     assert.equal(capBefore.captive, true);
 
-    // 2. Guest requests free 30 minutes
     const freeRes = await fetch(`${base}/api/guest/free`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-real-ip': ip },
@@ -82,37 +68,30 @@ test('End-to-End HTTP Simulation: Guest Free + Admin Dashboard + RFC 8908 Cappor
     assert.equal(freeRes.ok, true);
     assert.equal(freeRes.remainingSeconds, 1800);
 
-    // 3. Capport after login -> captive: false + seconds-remaining
-    const capAfter = await fetch(`${base}/api/guest/capport`, {
-      headers: { 'x-real-ip': ip },
-    }).then((r) => r.json());
+    const capAfter = await fetch(`${base}/api/guest/capport`, { headers: { 'x-real-ip': ip } }).then((r) => r.json());
     assert.equal(capAfter.captive, false);
-    assert.ok(capAfter['seconds-remaining'] > 0);
 
-    // 4. Admin logs in and views active session + terminates it
-    const adminLogin = await fetch(`${base}/api/admin/login`, {
+    // Admin creates a 60-min account and views free-quotas
+    const adm = await fetch(`${base}/api/admin/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'superadmin', password: 'SuperPass123!' }),
+      body: JSON.stringify({ username: 'admin', password: 'StrongAdminPass99!' }),
     }).then((r) => r.json());
+    assert.ok(adm.token);
 
-    const activeList = await fetch(`${base}/api/admin/sessions/active`, {
-      headers: { Authorization: `Bearer ${adminLogin.token}` },
-    }).then((r) => r.json());
-    assert.equal(activeList.sessions.length, 1);
-
-    await fetch(`${base}/api/admin/sessions/${activeList.sessions[0].id}/terminate`, {
+    const created = await fetch(`${base}/api/admin/users`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${adminLogin.token}` },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adm.token}` },
+      body: JSON.stringify({ username: 'guest1', password: 'UserPass1', duration_minutes: 60 }),
     });
+    assert.equal(created.status, 201);
 
-    const activeAfter = await fetch(`${base}/api/admin/sessions/active`, {
-      headers: { Authorization: `Bearer ${adminLogin.token}` },
+    const quotas = await fetch(`${base}/api/admin/free-quotas`, {
+      headers: { Authorization: `Bearer ${adm.token}` },
     }).then((r) => r.json());
-    assert.equal(activeAfter.sessions.length, 0);
+    assert.equal(quotas.quotas.length, 1);
   } finally {
     server.closeAllConnections?.();
     server.close();
-    db.close();
   }
 });

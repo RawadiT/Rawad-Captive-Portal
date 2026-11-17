@@ -116,9 +116,7 @@ export class RouterOSRestClient implements MikroTikAdapter {
         }
       );
 
-      req.on('timeout', () => {
-        req.destroy(new Error('RouterOS REST request timed out'));
-      });
+      req.on('timeout', () => req.destroy(new Error('RouterOS REST request timed out')));
       req.on('error', reject);
       if (payload) req.write(payload);
       req.end();
@@ -129,7 +127,7 @@ export class RouterOSRestClient implements MikroTikAdapter {
     const cleanIp = ipAddress.replace(/^::ffff:/, '').trim();
     if (!cleanIp) return null;
 
-    const hosts = await this.request<Array<{ address?: string; 'mac-address'?: string; server?: string }>>(
+    const hosts = await this.request<Array<{ address?: string; 'mac-address'?: string }>>(
       'GET',
       `/ip/hotspot/host?address=${encodeURIComponent(cleanIp)}`
     );
@@ -163,7 +161,38 @@ export class RouterOSRestClient implements MikroTikAdapter {
     }
   }
 
+  /**
+   * Enforces per-session wall-clock expiration using a dedicated HotSpot User Profile
+   * with `session-timeout` (NOT `limit-uptime`).
+   */
   async grantHotspotAccess(input: GrantHotspotAccessInput): Promise<GrantHotspotAccessResult> {
+    const timeoutStr = formatRouterOSDuration(input.sessionTimeoutSeconds);
+
+    // 1. Upsert dedicated per-session HotSpot User Profile with exact session-timeout
+    const existingProfiles = await this.request<Array<{ '.id': string }>>(
+      'GET',
+      `/ip/hotspot/user/profile?name=${encodeURIComponent(input.profile)}`
+    );
+    if (existingProfiles.length > 0) {
+      await this.request(
+        'PATCH',
+        `/ip/hotspot/user/profile/${encodeURIComponent(existingProfiles[0]['.id'])}`,
+        {
+          'session-timeout': timeoutStr,
+          'keepalive-timeout': '00:02:00',
+          'shared-users': '1',
+        }
+      );
+    } else {
+      await this.request('PUT', '/ip/hotspot/user/profile', {
+        name: input.profile,
+        'session-timeout': timeoutStr,
+        'keepalive-timeout': '00:02:00',
+        'shared-users': '1',
+      });
+    }
+
+    // 2. Replace any previous HotSpot user with same username
     const existingUsers = await this.request<Array<{ '.id': string }>>(
       'GET',
       `/ip/hotspot/user?name=${encodeURIComponent(input.username)}`
@@ -172,19 +201,15 @@ export class RouterOSRestClient implements MikroTikAdapter {
       await this.request('DELETE', `/ip/hotspot/user/${encodeURIComponent(u['.id'])}`);
     }
 
-    const userPayload: Record<string, string> = {
+    const createdUser = await this.request<{ '.id': string }>('PUT', '/ip/hotspot/user', {
       name: input.username,
       password: input.password,
       'mac-address': input.macAddress.toUpperCase(),
       profile: input.profile,
       server: this.cfg.hotspotServer,
-    };
-    if (input.limitUptimeSeconds !== null) {
-      userPayload['limit-uptime'] = formatRouterOSDuration(input.limitUptimeSeconds);
-    }
+    });
 
-    const createdUser = await this.request<{ '.id': string }>('PUT', '/ip/hotspot/user', userPayload);
-
+    // 3. Programmatically log the device in to HotSpot active table
     const loginResult = await this.request<{ ret?: string }>('POST', '/ip/hotspot/active/login', {
       user: input.username,
       password: input.password,
@@ -216,6 +241,16 @@ export class RouterOSRestClient implements MikroTikAdapter {
     );
     for (const u of users) {
       await this.request('DELETE', `/ip/hotspot/user/${encodeURIComponent(u['.id'])}`);
+    }
+
+    if (input.profile && input.profile.startsWith('rawad-sess-')) {
+      const profiles = await this.request<Array<{ '.id': string }>>(
+        'GET',
+        `/ip/hotspot/user/profile?name=${encodeURIComponent(input.profile)}`
+      );
+      for (const p of profiles) {
+        await this.request('DELETE', `/ip/hotspot/user/profile/${encodeURIComponent(p['.id'])}`);
+      }
     }
   }
 

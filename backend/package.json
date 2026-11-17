@@ -1,15 +1,15 @@
 {
   "name": "rawad-captive-portal-backend",
   "version": "1.0.0",
-  "description": "Backend API and MikroTik integration for Rawad Tech Captive Portal",
+  "description": "Backend API for Rawad Tech Captive Portal (Supabase PostgreSQL + MikroTik RouterOS v7)",
   "type": "module",
-  "main": "dist/server.js",
+  "main": "dist/api/server.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/server.js",
-    "dev": "node --watch --experimental-strip-types api/server.ts"
+    "start": "node dist/api/server.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "helmet": "^8.0.0"

@@ -10,14 +10,13 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "declaration": true,
-    "sourceMap": true
+    "sourceMap": false
   },
   "include": [
     "api/**/*.ts",
-    "audit-logs/**/*.ts",
     "authentication/**/*.ts",
     "config/**/*.ts",
+    "db/**/*.ts",
     "mikrotik/**/*.ts",
     "quota-manager/**/*.ts",
     "session-monitor/**/*.ts",

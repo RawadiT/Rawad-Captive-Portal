@@ -20,11 +20,12 @@ deployment/tls/certs/
 *.sqlite3
 database/backup/snapshots/
 
-# Dependencies, Build Outputs & Caches
+# Dependencies, Build Outputs, USB Bundle & Caches
 node_modules/
 .next/
 dist/
 out/
+usb-package/
 *.tsbuildinfo
 *.log
 .DS_Store

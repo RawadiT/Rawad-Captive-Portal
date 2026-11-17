@@ -5,7 +5,7 @@ export interface GrantHotspotAccessInput {
   password: string;
   macAddress: string;
   ipAddress: string;
-  limitUptimeSeconds: number | null;
+  sessionTimeoutSeconds: number;
   profile: string;
 }
 
@@ -17,6 +17,7 @@ export interface GrantHotspotAccessResult {
 export interface RevokeHotspotAccessInput {
   username: string;
   macAddress?: string;
+  profile?: string;
 }
 
 export interface ResolvedHotspotClient {

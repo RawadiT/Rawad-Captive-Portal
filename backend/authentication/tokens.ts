@@ -1,10 +1,8 @@
 import crypto from 'node:crypto';
-import type { AdminRole } from '../types/index.js';
 
 export interface AdminTokenPayload {
   sub: string;
   username: string;
-  role: AdminRole;
   iat: number;
   exp: number;
 }
@@ -48,7 +46,7 @@ export function verifyAdminToken(token: string, secret: string): AdminTokenPaylo
 
   try {
     const parsed = JSON.parse(fromBase64Url(encoded)) as AdminTokenPayload;
-    if (!parsed.sub || !parsed.username || !parsed.role || !parsed.exp) return null;
+    if (!parsed.sub || !parsed.username || !parsed.exp) return null;
     if (Math.floor(Date.now() / 1000) >= parsed.exp) return null;
     return parsed;
   } catch {

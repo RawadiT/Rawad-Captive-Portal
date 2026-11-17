@@ -262,7 +262,7 @@ export default function GuestPortalPage() {
                       <span>جارٍ التفعيل...</span>
                     </>
                   ) : (
-                    <span>الحصول على 30 دقيقة مجانية</span>
+                    <span>إنترنت مجاني لمدة 30 دقيقة</span>
                   )}
                 </button>
                 {!status?.freeEligible && status?.freeReason && (

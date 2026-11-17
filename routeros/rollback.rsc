@@ -1,11 +1,11 @@
 # ==============================================================================
-# RAWAD TECH CAPTIVE PORTAL — MIKROTIK ROUTEROS 7.x EXACT & SAFE ROLLBACK
-# - Only removes items that deploy.rsc actually created (checked via ownership flags).
+# RAWAD TECH CAPTIVE PORTAL — MIKROTIK ROUTEROS v7 EXACT & SAFE ROLLBACK
+# - Only removes items created by deploy.rsc (checked via ownership flags).
 # - Restores previous DNS, www-ssl, NTP, and Timezone values.
-# - Safe to run after partial deploy failures or multiple times (idempotent).
+# - Never touches ether1-ether9 or any pre-existing configuration.
 # ==============================================================================
 
-:put "=== Rolling back Rawad Tech Captive Portal configuration ==="
+:put "=== Rolling back Rawad Tech Captive Portal (ether10 only) ==="
 
 :global rawadPrevDnsRemote
 :global rawadPrevWwwSslDis
@@ -20,8 +20,6 @@
 :global rawadCreatedDhcpSrv
 :global rawadCreatedStaticDns
 :global rawadCreatedHsProf
-:global rawadCreatedHsFree
-:global rawadCreatedHsUser
 :global rawadCreatedHsSrv
 :global rawadCreatedWg
 :global rawadCreatedNat
@@ -32,22 +30,17 @@
     /system script run rawad-portal-state
 }
 
-# 1. Remove firewall & NAT rules owned by this project
 /ip firewall filter remove [find where comment~"rawad-guest-portal:"]
 /ipv6 firewall filter remove [find where comment~"rawad-guest-portal:"]
 :if ($rawadCreatedNat = true) do={
     /ip firewall nat remove [find where comment="rawad-guest-portal-nat"]
 }
 
-# 2. Remove HotSpot & Walled Garden items only if created by deploy.rsc
+/ip hotspot user remove [find where name~"^(free-|usr-)"]
+/ip hotspot user profile remove [find where name~"^rawad-sess-"]
+
 :if ($rawadCreatedHsSrv = true) do={
     /ip hotspot remove [find where name="rawad-guest-hotspot"]
-}
-:if ($rawadCreatedHsFree = true) do={
-    /ip hotspot user profile remove [find where name="rawad-free-30m"]
-}
-:if ($rawadCreatedHsUser = true) do={
-    /ip hotspot user profile remove [find where name="rawad-user"]
 }
 :if ($rawadCreatedHsProf = true) do={
     /ip hotspot profile remove [find where name="rawad-hs-prof"]
@@ -56,7 +49,6 @@
     /ip hotspot walled-garden ip remove [find where comment="rawad-guest-portal-allow-https"]
 }
 
-# 3. Remove DHCP, Pool, Static DNS & IP only if created by deploy.rsc
 :if ($rawadCreatedDhcpSrv = true) do={
     /ip dhcp-server remove [find where name="rawad-guest-dhcp"]
 }
@@ -76,7 +68,6 @@
     /ip address remove [find where comment="rawad-guest-portal"]
 }
 
-# 4. Restore previous DNS, www-ssl, Timezone, and NTP values
 :if ([:typeof $rawadPrevDnsRemote] = "bool") do={
     /ip dns set allow-remote-requests=$rawadPrevDnsRemote
 }
@@ -90,7 +81,6 @@
     /system ntp client set enabled=$rawadPrevNtpEn
 }
 
-# 5. Remove API user & group only if created by deploy.rsc
 :if ($rawadCreatedApiUser = true) do={
     /user remove [find where name="rawad-api"]
 }
@@ -100,4 +90,4 @@
 
 /system script remove [find where name="rawad-portal-state"]
 
-:put "=== ROLLBACK COMPLETE (ONLY PROJECT-OWNED ITEMS REMOVED; PREVIOUS STATE RESTORED) ==="
+:put "=== ROLLBACK COMPLETE ==="
