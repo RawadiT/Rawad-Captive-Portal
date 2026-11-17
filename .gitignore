@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.field-test.example
 .dns-credentials.env
 
 # TLS Certificates & Private Keys
