@@ -74,24 +74,34 @@ assert.match(deployRsc, /rawad-sync-revocations/);
 assert.match(deployRsc, /x-router-secret:/);
 assert.match(deployRsc, /\\\$validUuid && \\\$validMac && \\\$validIp/);
 assert.match(deployRsc, /\\\$ackNum >= 1 && \\\$ackNum <= \\\$batchCount/);
+assert.ok(deployRsc.includes('server=\\"rawad-guest-hotspot\\" && mac-address=\\$rMac && address=\\$rIp'));
+assert.ok(!/\/ip hotspot active remove \[find where mac-address=/.test(deployRsc), 'HotSpot active removal must always be scoped to server="rawad-guest-hotspot"');
+assert.ok(deployRsc.includes('list=\\"rawad-verified\\" && address=\\$rIp && comment=\\"rawad-guest-portal\\"'));
 assert.match(rollbackRsc, /\/system script remove \$stateSid/);
 assert.match(rollbackRsc, /\/system script remove \$anchorSid/);
 assert.match(rollbackRsc, /\$rawadCreatedSched = true/);
 
-// Behavioral JS check for RouterOS ACK validation logic (rejects ACK:0, ACK:, ERR:..., and malformed rows)
+// Behavioral JS check for RouterOS ACK validation logic (HTTP status + numeric range + malformed rows)
 {
-  const parseAck = (status, data, batchCount) => {
-    if (status !== 'finished' || typeof data !== 'string' || !data.startsWith('ACK:')) return false;
-    const rawNum = data.slice(4).trim();
-    if (!/^\d+$/.test(rawNum)) return false;
+  const parseAck = (res, batchCount) => {
+    if (!res || res.status !== 'finished') return false;
+    if (res.code !== undefined && Number(res.code) !== 200) return false;
+    if (typeof res.data !== 'string' || !res.data.startsWith('ACK:')) return false;
+    const rawNum = res.data.slice(4);
+    if (!/^[0-9]+$/.test(rawNum)) return false;
     const n = Number(rawNum);
     return n >= 1 && n <= batchCount;
   };
-  assert.equal(parseAck('finished', 'ACK:2', 2), true);
-  assert.equal(parseAck('finished', 'ACK:0', 2), false, 'ACK:0 must NOT be treated as batch success');
-  assert.equal(parseAck('finished', 'ACK:', 2), false, 'ACK: must NOT be treated as batch success');
-  assert.equal(parseAck('finished', 'ERR:db_error', 2), false);
-  assert.equal(parseAck('failed', 'ACK:2', 2), false);
+  assert.equal(parseAck({ status: 'finished', code: 200, data: 'ACK:2' }, 2), true);
+  assert.equal(parseAck({ status: 'finished', code: 401, data: 'ACK:1' }, 2), false, 'HTTP 401 must be rejected even with ACK:1 body');
+  assert.equal(parseAck({ status: 'finished', code: 500, data: 'ACK:1' }, 2), false, 'HTTP 500 must be rejected even with ACK:1 body');
+  assert.equal(parseAck({ status: 'finished', code: 429, data: 'ACK:1' }, 2), false, 'HTTP 429 must be rejected');
+  assert.equal(parseAck({ status: 'failed', code: 200, data: 'ACK:1' }, 2), false, 'status=failed must be rejected');
+  assert.equal(parseAck({ status: 'finished', code: 200, data: 'ACK:0' }, 2), false, 'ACK:0 must NOT be treated as batch success');
+  assert.equal(parseAck({ status: 'finished', code: 200, data: 'ACK:' }, 2), false, 'Empty ACK must NOT be treated as batch success');
+  assert.equal(parseAck({ status: 'finished', code: 200, data: 'ACK:1abc' }, 2), false, 'Malformed count must be rejected');
+  assert.equal(parseAck({ status: 'finished', code: 200, data: 'ACK:3' }, 2), false, 'Count above batch size must be rejected');
+  assert.equal(parseAck({ status: 'finished', code: 200, data: 'ERR:db_error' }, 2), false);
 
   const isValidRevRow = (rId, rMac, rIp) =>
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rId) &&

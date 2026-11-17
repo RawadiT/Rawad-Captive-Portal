@@ -228,20 +228,24 @@
   ":local sec \"" . $routerSecret . "\";\n" . \
   ":local macStr \$\"mac-address\";\n" . \
   ":local ipStr \$address;\n" . \
-  "/ip firewall address-list remove [find where list=\"rawad-verified\" && address=\$ipStr];\n" . \
+  "/ip firewall address-list remove [find where list=\"rawad-verified\" && address=\$ipStr && comment=\"rawad-guest-portal\"];\n" . \
   ":do {\n" . \
   "  :local res [/tool fetch url=(\"https://\" . \$supaHost . \"/functions/v1/verify-mac?mac=\" . \$macStr . \"&ip=\" . \$ipStr) http-header-field=(\"x-router-secret:\" . \$sec) output=user as-value];\n" . \
-  "  :if ((\$res->\"status\") = \"finished\") do={\n" . \
+  "  :local httpOk ([:typeof (\$res->\"code\")] = \"nothing\" || [:tonum (\$res->\"code\")] = 200);\n" . \
+  "  :if ((\$res->\"status\") = \"finished\" && \$httpOk) do={\n" . \
   "    :local body (\$res->\"data\");\n" . \
   "    :if ([:pick \$body 0 6] = \"ALLOW:\") do={\n" . \
-  "      :local remSec [:tonum [:pick \$body 6 [:len \$body]]];\n" . \
-  "      :if (\$remSec > 0) do={\n" . \
-  "        /ip firewall address-list add list=\"rawad-verified\" address=\$ipStr timeout=(\$remSec . \"s\") comment=\"rawad-guest-portal\";\n" . \
-  "      } else={ /ip hotspot active remove [find where mac-address=\$macStr]; }\n" . \
-  "    } else={ /ip hotspot active remove [find where mac-address=\$macStr]; }\n" . \
-  "  } else={ /ip hotspot active remove [find where mac-address=\$macStr]; }\n" . \
+  "      :local remRaw [:pick \$body 6 [:len \$body]];\n" . \
+  "      :if (\$remRaw ~ \"^[0-9]+\\$\") do={\n" . \
+  "        :local remSec [:tonum \$remRaw];\n" . \
+  "        :if (\$remSec > 0) do={\n" . \
+  "          /ip firewall address-list add list=\"rawad-verified\" address=\$ipStr timeout=(\$remSec . \"s\") comment=\"rawad-guest-portal\";\n" . \
+  "        } else={ /ip hotspot active remove [find where server=\"rawad-guest-hotspot\" && mac-address=\$macStr && address=\$ipStr]; }\n" . \
+  "      } else={ /ip hotspot active remove [find where server=\"rawad-guest-hotspot\" && mac-address=\$macStr && address=\$ipStr]; }\n" . \
+  "    } else={ /ip hotspot active remove [find where server=\"rawad-guest-hotspot\" && mac-address=\$macStr && address=\$ipStr]; }\n" . \
+  "  } else={ /ip hotspot active remove [find where server=\"rawad-guest-hotspot\" && mac-address=\$macStr && address=\$ipStr]; }\n" . \
   "} on-error={\n" . \
-  "  /ip hotspot active remove [find where mac-address=\$macStr];\n" . \
+  "  /ip hotspot active remove [find where server=\"rawad-guest-hotspot\" && mac-address=\$macStr && address=\$ipStr];\n" . \
   "}")
 
 :local onLogoutSrc "/ip firewall address-list remove [find where list=\"rawad-verified\" && address=\$address];"
@@ -310,7 +314,8 @@
   ":local sec \"" . $routerSecret . "\";\n" . \
   ":do {\n" . \
   "  :local res [/tool fetch url=(\"https://\" . \$supaHost . \"/functions/v1/verify-mac?action=revoked\") http-header-field=(\"x-router-secret:\" . \$sec) output=user as-value];\n" . \
-  "  :if ((\$res->\"status\") = \"finished\") do={\n" . \
+  "  :local feedHttpOk ([:typeof (\$res->\"code\")] = \"nothing\" || [:tonum (\$res->\"code\")] = 200);\n" . \
+  "  :if ((\$res->\"status\") = \"finished\" && \$feedHttpOk) do={\n" . \
   "    :local body (\$res->\"data\");\n" . \
   "    :local ackIds \"\";\n" . \
   "    :local batchCount 0;\n" . \
@@ -335,7 +340,7 @@
   "            :local cleaned false;\n" . \
   "            :do {\n" . \
   "              /ip firewall address-list remove [find where list=\"rawad-verified\" && address=\$rIp && comment=\"rawad-guest-portal\"];\n" . \
-  "              /ip hotspot active remove [find where mac-address=\$rMac];\n" . \
+  "              /ip hotspot active remove [find where server=\"rawad-guest-hotspot\" && mac-address=\$rMac && address=\$rIp];\n" . \
   "              :set cleaned true;\n" . \
   "            } on-error={}\n" . \
   "            :if (\$cleaned) do={\n" . \
@@ -344,9 +349,11 @@
   "              :if (\$batchCount >= 10) do={\n" . \
   "                :do {\n" . \
   "                  :local ackRes [/tool fetch url=(\"https://\" . \$supaHost . \"/functions/v1/verify-mac?action=ack&ids=\" . \$ackIds) http-header-field=(\"x-router-secret:\" . \$sec) output=user as-value];\n" . \
+  "                  :local ackHttpOk ([:typeof (\$ackRes->\"code\")] = \"nothing\" || [:tonum (\$ackRes->\"code\")] = 200);\n" . \
   "                  :local ackData (\$ackRes->\"data\");\n" . \
-  "                  :local ackNum [:tonum [:pick \$ackData 4 [:len \$ackData]]];\n" . \
-  "                  :if ((\$ackRes->\"status\") = \"finished\" && [:pick \$ackData 0 4] = \"ACK:\" && [:typeof \$ackNum] = \"num\" && \$ackNum >= 1 && \$ackNum <= \$batchCount) do={} else={ :put \"WARN: unexpected ACK response\"; }\n" . \
+  "                  :local ackRaw [:pick \$ackData 4 [:len \$ackData]];\n" . \
+  "                  :local ackNum [:tonum \$ackRaw];\n" . \
+  "                  :if ((\$ackRes->\"status\") = \"finished\" && \$ackHttpOk && [:len \$ackData] >= 5 && [:pick \$ackData 0 4] = \"ACK:\" && (\$ackRaw ~ \"^[0-9]+\\$\") && [:typeof \$ackNum] = \"num\" && \$ackNum >= 1 && \$ackNum <= \$batchCount) do={} else={ :put \"WARN: unexpected ACK response\"; }\n" . \
   "                } on-error={}\n" . \
   "                :set ackIds \"\";\n" . \
   "                :set batchCount 0;\n" . \
@@ -359,9 +366,11 @@
   "    :if (\$ackIds != \"\" && \$batchCount > 0) do={\n" . \
   "      :do {\n" . \
   "        :local ackRes [/tool fetch url=(\"https://\" . \$supaHost . \"/functions/v1/verify-mac?action=ack&ids=\" . \$ackIds) http-header-field=(\"x-router-secret:\" . \$sec) output=user as-value];\n" . \
+  "        :local ackHttpOk ([:typeof (\$ackRes->\"code\")] = \"nothing\" || [:tonum (\$ackRes->\"code\")] = 200);\n" . \
   "        :local ackData (\$ackRes->\"data\");\n" . \
-  "        :local ackNum [:tonum [:pick \$ackData 4 [:len \$ackData]]];\n" . \
-  "        :if ((\$ackRes->\"status\") = \"finished\" && [:pick \$ackData 0 4] = \"ACK:\" && [:typeof \$ackNum] = \"num\" && \$ackNum >= 1 && \$ackNum <= \$batchCount) do={} else={ :put \"WARN: unexpected final ACK response\"; }\n" . \
+  "        :local ackRaw [:pick \$ackData 4 [:len \$ackData]];\n" . \
+  "        :local ackNum [:tonum \$ackRaw];\n" . \
+  "        :if ((\$ackRes->\"status\") = \"finished\" && \$ackHttpOk && [:len \$ackData] >= 5 && [:pick \$ackData 0 4] = \"ACK:\" && (\$ackRaw ~ \"^[0-9]+\\$\") && [:typeof \$ackNum] = \"num\" && \$ackNum >= 1 && \$ackNum <= \$batchCount) do={} else={ :put \"WARN: unexpected final ACK response\"; }\n" . \
   "      } on-error={}\n" . \
   "    }\n" . \
   "  }\n" . \
