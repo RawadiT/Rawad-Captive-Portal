@@ -13,11 +13,19 @@
 :global rawadPrevWwwSslCert
 :global rawadPrevTz
 :global rawadPrevNtpEn
+:global rawadSetDnsRemote
+:global rawadSetWwwSslDis
+:global rawadSetWwwSslAddr
+:global rawadSetWwwSslCert
+:global rawadSetTz
+:global rawadSetNtpEn
 :global rawadGuestIf
 :global rawadGuestGw
 :global rawadGuestNet
 :global rawadBackendIp
 :global rawadPortalDomain
+:global rawadIdStateScript
+:global rawadStateBodyLen
 :global rawadCreatedIpAddr; :global rawadIdIpAddr
 :global rawadCreatedPool; :global rawadIdPool
 :global rawadCreatedDhcpOpt; :global rawadIdDhcpOpt
@@ -41,8 +49,10 @@
 :global rawadCreatedV6Fwd; :global rawadIdV6Fwd
 :global rawadCreatedV6In; :global rawadIdV6In
 
-:if ([:len [/system script find where name="rawad-portal-state"]] > 0) do={
+:if ([:len [/system script find where name="rawad-portal-state" && comment="rawad-guest-portal-state"]] > 0) do={
     /system script run rawad-portal-state
+} else={
+    :error "ABORT: rawad-portal-state with expected comment not found (or replaced manually). Refusing unsafe rollback."
 }
 
 # 1. Remove each firewall rule individually ONLY if created by deploy.rsc, matching exact .id AND unmodified properties
@@ -111,8 +121,10 @@
     }
 }
 :if ($rawadCreatedHsProf = true && $rawadIdHsProf != "") do={
-    :if ([:len [/ip hotspot profile find where .id=$rawadIdHsProf && name="rawad-hs-prof" && hotspot-address=$rawadGuestGw]] > 0) do={
-        /ip hotspot profile remove $rawadIdHsProf
+    :if ([:len [/ip hotspot find where profile="rawad-hs-prof"]] = 0) do={
+        :if ([:len [/ip hotspot profile find where .id=$rawadIdHsProf && name="rawad-hs-prof" && hotspot-address=$rawadGuestGw]] > 0) do={
+            :do { /ip hotspot profile remove $rawadIdHsProf } on-error={ :put "WARN: Could not remove rawad-hs-prof" }
+        }
     }
 }
 :if ($rawadCreatedWg = true && $rawadIdWg != "") do={
@@ -133,52 +145,67 @@
     }
 }
 :if ($rawadCreatedDhcpOpt = true && $rawadIdDhcpOpt != "") do={
-    :if ([:len [/ip dhcp-server option find where .id=$rawadIdDhcpOpt && name="rawad-capport-114" && code=114]] > 0) do={
-        /ip dhcp-server option remove $rawadIdDhcpOpt
+    :if ([:len [/ip dhcp-server network find where dhcp-option~"rawad-capport-114"]] = 0) do={
+        :if ([:len [/ip dhcp-server option find where .id=$rawadIdDhcpOpt && name="rawad-capport-114" && code=114]] > 0) do={
+            :do { /ip dhcp-server option remove $rawadIdDhcpOpt } on-error={ :put "WARN: Could not remove rawad-capport-114" }
+        }
     }
 }
 :if ($rawadCreatedPool = true && $rawadIdPool != "") do={
-    :if ([:len [/ip pool find where .id=$rawadIdPool && name="rawad-guest-pool" && ranges=192.168.20.10-192.168.20.250]] > 0) do={
-        /ip pool remove $rawadIdPool
+    :if ([:len [/ip dhcp-server find where address-pool="rawad-guest-pool"]] = 0 && [:len [/ip hotspot find where address-pool="rawad-guest-pool"]] = 0) do={
+        :if ([:len [/ip pool find where .id=$rawadIdPool && name="rawad-guest-pool" && ranges=192.168.20.10-192.168.20.250]] > 0) do={
+            :do { /ip pool remove $rawadIdPool } on-error={ :put "WARN: Could not remove rawad-guest-pool" }
+        }
     }
 }
 :if ($rawadCreatedStaticDns = true && $rawadIdStaticDns != "") do={
     :if ([:len [/ip dns static find where .id=$rawadIdStaticDns && name=$rawadPortalDomain && address=$rawadBackendIp && comment="rawad-guest-portal"]] > 0) do={
-        /ip dns static remove $rawadIdStaticDns
+        :do { /ip dns static remove $rawadIdStaticDns } on-error={ :put "WARN: Could not remove static DNS entry" }
     }
 }
 :if ($rawadCreatedIpAddr = true && $rawadIdIpAddr != "") do={
     :if ([:len [/ip address find where .id=$rawadIdIpAddr && interface=$rawadGuestIf && address=($rawadGuestGw . "/24") && comment="rawad-guest-portal"]] > 0) do={
-        /ip address remove $rawadIdIpAddr
+        :do { /ip address remove $rawadIdIpAddr } on-error={ :put "WARN: Could not remove guest IP address" }
     }
 }
 
-# 4. Restore previous DNS, www-ssl, Timezone, and NTP values
-:if ([:typeof $rawadPrevDnsRemote] = "bool") do={
+# 4. Restore previous DNS, www-ssl, Timezone, and NTP values ONLY if not manually modified after deploy
+:if ([:typeof $rawadPrevDnsRemote] = "bool" && [/ip dns get allow-remote-requests] = $rawadSetDnsRemote) do={
     /ip dns set allow-remote-requests=$rawadPrevDnsRemote
 }
-:if ([:typeof $rawadPrevWwwSslDis] = "bool") do={
+:if ([:typeof $rawadPrevWwwSslDis] = "bool" && [/ip service get www-ssl disabled] = $rawadSetWwwSslDis && [/ip service get www-ssl address] = $rawadSetWwwSslAddr && [/ip service get www-ssl certificate] = $rawadSetWwwSslCert) do={
     /ip service set www-ssl disabled=$rawadPrevWwwSslDis address=$rawadPrevWwwSslAddr certificate=$rawadPrevWwwSslCert
 }
-:if ([:typeof $rawadPrevTz] = "str" && [:len $rawadPrevTz] > 0) do={
+:if ([:typeof $rawadPrevTz] = "str" && [:len $rawadPrevTz] > 0 && [/system clock get time-zone-name] = $rawadSetTz) do={
     /system clock set time-zone-name=$rawadPrevTz
 }
-:if ([:typeof $rawadPrevNtpEn] = "bool") do={
+:if ([:typeof $rawadPrevNtpEn] = "bool" && [/system ntp client get enabled] = $rawadSetNtpEn) do={
     /system ntp client set enabled=$rawadPrevNtpEn
 }
 
-# 5. Remove API user & group only if created by deploy.rsc AND unmodified
+# 5. Remove API user & group independently ONLY if created by deploy.rsc, unmodified, and dependency-free
 :if ($rawadCreatedApiUser = true && $rawadIdApiUser != "") do={
     :if ([:len [/user find where .id=$rawadIdApiUser && name="rawad-api" && group="rawad-api-group" && comment="rawad-guest-portal"]] > 0) do={
-        /user remove $rawadIdApiUser
+        :do { /user remove $rawadIdApiUser } on-error={ :put "WARN: Could not remove rawad-api user" }
     }
 }
 :if ($rawadCreatedApiGroup = true && $rawadIdApiGroup != "") do={
-    :if ([:len [/user group find where .id=$rawadIdApiGroup && name="rawad-api-group"]] > 0) do={
-        /user group remove $rawadIdApiGroup
+    :if ([:len [/user find where group="rawad-api-group"]] = 0) do={
+        :if ([:len [/user group find where .id=$rawadIdApiGroup && name="rawad-api-group"]] > 0) do={
+            :do { /user group remove $rawadIdApiGroup } on-error={ :put "WARN: Could not remove rawad-api-group" }
+        }
     }
 }
 
-/system script remove [find where name="rawad-portal-state"]
+# 6. Remove rawad-portal-state ONLY if exact .id AND unmodified body/length match
+:if ([:typeof $rawadIdStateScript] = "str" && $rawadIdStateScript != "" && [:typeof $rawadStateBodyLen] = "num" && $rawadStateBodyLen > 0) do={
+    :if ([:len [/system script find where .id=$rawadIdStateScript && name="rawad-portal-state" && comment="rawad-guest-portal-state"]] > 0) do={
+        :local curSrc [/system script get $rawadIdStateScript source]
+        :local expectedTail ("\n:global rawadStateBodyLen " . $rawadStateBodyLen . ";")
+        :if ([:len $curSrc] = ($rawadStateBodyLen + [:len $expectedTail]) && [:find $curSrc $expectedTail] = $rawadStateBodyLen) do={
+            /system script remove $rawadIdStateScript
+        }
+    }
+}
 
 :put "=== ROLLBACK COMPLETE ==="

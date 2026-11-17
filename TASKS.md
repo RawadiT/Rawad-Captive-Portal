@@ -1,9 +1,9 @@
-# TASKS.md — Fifth Audit Remediation
+# TASKS.md — Sixth Audit Remediation
 
-**Baseline Commit:** `79c360b8108036e8cc2c5f64cf2d5b808bee31bd`
+**Baseline Commit:** `de61fa5793d5cece616fb6c3fc036b09d879a385`
 
-- [x] **A5.1** Make `routeros/deploy.rsc` DNS Security Gate unconditional (runs even if `allow-remote-requests=yes`), resolve WAN interfaces without fragile `immediate-gw` substring matching, and verify `chain=input` TCP/UDP port 53 protection cannot be bypassed by earlier rules.
-- [x] **A5.2** Make `QuotaService.withLeaseRenewal` trackable, awaitable, and abort-on-failure (`LeaseLostError`), plus compensating MikroTik revoke on any provisioning failure or concurrent `reclaim_expired_provisioning_leases()` race; use `FOR UPDATE SKIP LOCKED` in `reclaim_expired_provisioning_leases()`.
-- [x] **A5.3** Prevent overlapping `SessionMonitor.syncSessions()` ticks in-process (`syncInFlight` + `setTimeout`), add PostgreSQL-backed crash-safe multi-process lock (`monitor_locks`, `try_acquire_monitor_lock`, `release_monitor_lock`), and retry/recover cleanly on PostgreSQL write failures after MikroTik revoke.
-- [x] **A5.4** Capture exact created `.id` values in `deploy.rsc` (`rawadId*`) and verify both `.id` AND unmodified properties in `rollback.rsc` so pre-existing, manually added, and manually modified resources are never deleted.
-- [x] **A5.5** Run all builds, TypeScript checks, Fifth Audit simulation & static validations (DNS gate, lease, recovery, concurrency, rollback), USB package smoke test, update `PROGRESS.md`, commit & push to `main`.
+- [x] **A6.1** Fix `QuotaService.withLeaseRenewal` late MikroTik completion race: wait up to `lateCompletionGraceMs` for in-flight `grantHotspotAccess` before compensating, and if still in flight, keep `revocation_pending` and trigger compensating revoke upon late completion.
+- [x] **A6.2** Add periodic `session_monitor_sync` lock renewal (`monitorLockRenewIntervalMs` / `monitorLockLeaseSeconds`) in `SessionMonitor` and abort further mutations if the lock is lost mid-cycle.
+- [x] **A6.3** Track `rawad-portal-state` exact `.id` (`rawadIdStateScript`) and body length (`rawadStateBodyLen`) in `deploy.rsc` / `rollback.rsc` so modified or replaced state scripts are never deleted.
+- [x] **A6.4** Record expected project-applied config values (`rawadSetDnsRemote`, `rawadSetWwwSsl*`, `rawadSetTz`, `rawadSetNtpEn`) and preserve manual post-deploy changes during rollback.
+- [x] **A6.5** Guard dependent resource removals (Pool, HotSpot Profile, DHCP Option, API Group) and isolate errors in `rollback.rsc`, then run all builds, Sixth Audit verification suite, USB package smoke test, commit & push to `main`.

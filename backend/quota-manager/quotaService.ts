@@ -15,6 +15,7 @@ export interface QuotaServiceConfig {
   freeQuotaSeconds: number;
   leaseRenewIntervalMs?: number;
   leaseExtendSeconds?: number;
+  lateCompletionGraceMs?: number;
   nowProvider?: () => Date;
 }
 
@@ -56,9 +57,14 @@ export class QuotaService {
     this.now = cfg.nowProvider ?? (() => new Date());
   }
 
-  private async withLeaseRenewal<T>(sessionId: string, fn: () => Promise<T>): Promise<T> {
+  private async withLeaseRenewal<T>(
+    sessionId: string,
+    target: { username: string; macAddress: string; profile: string },
+    fn: () => Promise<T>
+  ): Promise<T> {
     const intervalMs = this.cfg.leaseRenewIntervalMs ?? 30_000;
     const extendSeconds = this.cfg.leaseExtendSeconds ?? 90;
+    const lateGraceMs = this.cfg.lateCompletionGraceMs ?? 5_000;
 
     let stopped = false;
     let timer: NodeJS.Timeout | null = null;
@@ -116,8 +122,47 @@ export class QuotaService {
 
     scheduleNext();
 
+    const opPromise = fn();
+    let opSettled = false;
+    const opSettledPromise = opPromise.then(
+      () => {
+        opSettled = true;
+      },
+      () => {
+        opSettled = true;
+      }
+    );
+
     try {
-      return await Promise.race([fn(), leaseLostPromise]);
+      return await Promise.race([opPromise, leaseLostPromise]);
+    } catch (err) {
+      if (!opSettled) {
+        // Wait up to lateGraceMs for an in-flight MikroTik call to finish before compensating
+        let graceTimer: NodeJS.Timeout | null = null;
+        await Promise.race([
+          opSettledPromise,
+          new Promise<void>((resolve) => {
+            graceTimer = setTimeout(resolve, lateGraceMs);
+            graceTimer.unref();
+          }),
+        ]);
+        if (graceTimer) clearTimeout(graceTimer);
+
+        if (!opSettled) {
+          // MikroTik call is still running after grace period: keep revocation_pending and
+          // schedule compensating revoke as soon as the late MikroTik operation settles.
+          await this.db.markRevocationPending(sessionId).catch((e) =>
+            console.error('[CRITICAL] markRevocationPending for late op failed:', e)
+          );
+          void opSettledPromise.then(() =>
+            this.compensateFailedProvisioning(sessionId, target.username, target.macAddress, target.profile)
+          );
+          const wrapped = err instanceof Error ? err : new Error(String(err));
+          (wrapped as Error & { lateInFlight?: boolean }).lateInFlight = true;
+          throw wrapped;
+        }
+      }
+      throw err;
     } finally {
       stopped = true;
       if (timer) {
@@ -284,19 +329,24 @@ export class QuotaService {
     }
 
     try {
-      await this.withLeaseRenewal(begin.session_id, () =>
-        this.mikrotik.grantHotspotAccess({
-          username: hotspotUsername,
-          password: hotspotPassword,
-          macAddress: mac,
-          ipAddress: input.ipAddress,
-          bindMac: true,
-          sessionTimeoutSeconds: begin.remaining_seconds,
-          profile: hotspotProfile,
-        })
+      await this.withLeaseRenewal(
+        begin.session_id,
+        { username: hotspotUsername, macAddress: mac, profile: hotspotProfile },
+        () =>
+          this.mikrotik.grantHotspotAccess({
+            username: hotspotUsername,
+            password: hotspotPassword,
+            macAddress: mac,
+            ipAddress: input.ipAddress,
+            bindMac: true,
+            sessionTimeoutSeconds: begin.remaining_seconds,
+            profile: hotspotProfile,
+          })
       );
     } catch (err) {
-      await this.compensateFailedProvisioning(begin.session_id, hotspotUsername, mac, hotspotProfile);
+      if (!(err as { lateInFlight?: boolean }).lateInFlight) {
+        await this.compensateFailedProvisioning(begin.session_id, hotspotUsername, mac, hotspotProfile);
+      }
       throw err;
     }
 
@@ -386,19 +436,24 @@ export class QuotaService {
     }
 
     try {
-      await this.withLeaseRenewal(begin.session_id, () =>
-        this.mikrotik.grantHotspotAccess({
-          username: hotspotUsername,
-          password: hotspotPassword,
-          macAddress: mac,
-          ipAddress: input.ipAddress,
-          bindMac: false, // Ordinary accounts must NOT store a MAC restriction
-          sessionTimeoutSeconds: begin.remaining_seconds,
-          profile: hotspotProfile,
-        })
+      await this.withLeaseRenewal(
+        begin.session_id,
+        { username: hotspotUsername, macAddress: mac, profile: hotspotProfile },
+        () =>
+          this.mikrotik.grantHotspotAccess({
+            username: hotspotUsername,
+            password: hotspotPassword,
+            macAddress: mac,
+            ipAddress: input.ipAddress,
+            bindMac: false, // Ordinary accounts must NOT store a MAC restriction
+            sessionTimeoutSeconds: begin.remaining_seconds,
+            profile: hotspotProfile,
+          })
       );
     } catch (err) {
-      await this.compensateFailedProvisioning(begin.session_id, hotspotUsername, mac, hotspotProfile);
+      if (!(err as { lateInFlight?: boolean }).lateInFlight) {
+        await this.compensateFailedProvisioning(begin.session_id, hotspotUsername, mac, hotspotProfile);
+      }
       throw err;
     }
 

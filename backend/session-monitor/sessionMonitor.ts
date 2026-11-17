@@ -6,10 +6,17 @@ import type { MikroTikActiveSession, SessionRecord } from '../types/index.js';
 
 export interface SyncSessionsResult {
   skipped?: boolean;
+  lockLost?: boolean;
   reclaimedLeases: number;
   expiredCount: number;
   disconnectedCount: number;
   orphansRevoked: number;
+}
+
+export interface SessionMonitorOptions {
+  nowProvider?: () => Date;
+  monitorLockLeaseSeconds?: number;
+  monitorLockRenewIntervalMs?: number;
 }
 
 export class SessionMonitor {
@@ -19,13 +26,23 @@ export class SessionMonitor {
   private readonly instanceId = crypto.randomUUID();
   private readonly revokingSessionIds = new Set<string>();
   private readonly now: () => Date;
+  private readonly lockLeaseSeconds: number;
+  private readonly lockRenewIntervalMs: number;
 
   constructor(
     private readonly db: DatabaseClient,
     private readonly mikrotik: MikroTikAdapter,
-    nowProvider?: () => Date
+    nowOrOptions?: (() => Date) | SessionMonitorOptions
   ) {
-    this.now = nowProvider ?? (() => new Date());
+    if (typeof nowOrOptions === 'function') {
+      this.now = nowOrOptions;
+      this.lockLeaseSeconds = 30;
+      this.lockRenewIntervalMs = 10_000;
+    } else {
+      this.now = nowOrOptions?.nowProvider ?? (() => new Date());
+      this.lockLeaseSeconds = nowOrOptions?.monitorLockLeaseSeconds ?? 30;
+      this.lockRenewIntervalMs = nowOrOptions?.monitorLockRenewIntervalMs ?? 10_000;
+    }
   }
 
   start(intervalMs = 5000): void {
@@ -108,7 +125,11 @@ export class SessionMonitor {
   }
 
   private async executeSyncSessions(): Promise<SyncSessionsResult> {
-    const acquired = await this.db.tryAcquireMonitorLock('session_monitor_sync', this.instanceId, 30);
+    const acquired = await this.db.tryAcquireMonitorLock(
+      'session_monitor_sync',
+      this.instanceId,
+      this.lockLeaseSeconds
+    );
     if (!acquired) {
       return {
         skipped: true,
@@ -119,16 +140,56 @@ export class SessionMonitor {
       };
     }
 
+    let lockLost = false;
+    let lockStopped = false;
+    let lockTimer: NodeJS.Timeout | null = null;
+    let inFlightLockRenewal: Promise<void> | null = null;
+
+    const scheduleLockRenewal = (): void => {
+      if (lockStopped || lockLost) return;
+      lockTimer = setTimeout(() => {
+        if (lockStopped || lockLost) return;
+        inFlightLockRenewal = this.db
+          .tryAcquireMonitorLock('session_monitor_sync', this.instanceId, this.lockLeaseSeconds)
+          .then((ok) => {
+            inFlightLockRenewal = null;
+            if (!ok) {
+              lockLost = true;
+              console.error('[SessionMonitor] Lost monitor lock during sync cycle; aborting further mutations.');
+            } else {
+              scheduleLockRenewal();
+            }
+          })
+          .catch((err) => {
+            inFlightLockRenewal = null;
+            lockLost = true;
+            console.error(
+              '[SessionMonitor] Monitor lock renewal failed; aborting further mutations:',
+              err instanceof Error ? err.message : err
+            );
+          });
+      }, this.lockRenewIntervalMs);
+      lockTimer.unref();
+    };
+
+    scheduleLockRenewal();
+
     try {
       // 0. Periodically reclaim expired 'provisioning' leases -> 'revocation_pending' even without user traffic
       let reclaimedLeases = 0;
-      try {
-        reclaimedLeases = await this.db.reclaimExpiredProvisioningLeases();
-      } catch (err) {
-        console.error(
-          '[SessionMonitor] reclaimExpiredProvisioningLeases failed:',
-          err instanceof Error ? err.message : err
-        );
+      if (!lockLost) {
+        try {
+          reclaimedLeases = await this.db.reclaimExpiredProvisioningLeases();
+        } catch (err) {
+          console.error(
+            '[SessionMonitor] reclaimExpiredProvisioningLeases failed:',
+            err instanceof Error ? err.message : err
+          );
+        }
+      }
+
+      if (lockLost) {
+        return { skipped: false, lockLost: true, reclaimedLeases, expiredCount: 0, disconnectedCount: 0, orphansRevoked: 0 };
       }
 
       let mikrotikActive: MikroTikActiveSession[] = [];
@@ -140,9 +201,14 @@ export class SessionMonitor {
         mikrotikReachable = false;
       }
 
+      if (lockLost) {
+        return { skipped: false, lockLost: true, reclaimedLeases, expiredCount: 0, disconnectedCount: 0, orphansRevoked: 0 };
+      }
+
       // 1. Retry any revocation_pending sessions FIRST; only mark 'disconnected' after RouterOS revoke succeeds
       const pendingRevokes = await this.db.listRevocationPendingSessions();
       for (const p of pendingRevokes) {
+        if (lockLost) break;
         try {
           await this.revokeAndFinalizeSession(p, 'disconnected');
         } catch (err) {
@@ -151,6 +217,10 @@ export class SessionMonitor {
             err instanceof Error ? err.message : err
           );
         }
+      }
+
+      if (lockLost) {
+        return { skipped: false, lockLost: true, reclaimedLeases, expiredCount: 0, disconnectedCount: 0, orphansRevoked: 0 };
       }
 
       const actives = await this.db.listActiveSessions();
@@ -166,6 +236,7 @@ export class SessionMonitor {
       const validActiveKeys = new Set<string>();
 
       for (const s of actives) {
+        if (lockLost) break;
         const isExpired = nowMs >= Date.parse(s.expires_at);
         const key = `${s.hotspot_username}|${s.mac_address.toUpperCase()}`;
         const missingOnRouter = mikrotikReachable && !activeByKey.has(key);
@@ -195,8 +266,9 @@ export class SessionMonitor {
         }
       }
 
-      if (mikrotikReachable) {
+      if (mikrotikReachable && !lockLost) {
         for (const m of mikrotikActive) {
+          if (lockLost) break;
           if (!m.user.startsWith('free-') && !m.user.startsWith('usr-')) continue;
           const key = `${m.user}|${m.macAddress.toUpperCase()}`;
           if (!validActiveKeys.has(key)) {
@@ -213,11 +285,22 @@ export class SessionMonitor {
         }
       }
 
-      return { skipped: false, reclaimedLeases, expiredCount, disconnectedCount, orphansRevoked };
+      return { skipped: false, lockLost, reclaimedLeases, expiredCount, disconnectedCount, orphansRevoked };
     } finally {
-      await this.db.releaseMonitorLock('session_monitor_sync', this.instanceId).catch((err) => {
-        console.error('[SessionMonitor] releaseMonitorLock failed:', err instanceof Error ? err.message : err);
-      });
+      lockStopped = true;
+      if (lockTimer) {
+        clearTimeout(lockTimer);
+        lockTimer = null;
+      }
+      const pendingLock = inFlightLockRenewal as Promise<void> | null;
+      if (pendingLock) {
+        await pendingLock.catch(() => {});
+      }
+      if (!lockLost) {
+        await this.db.releaseMonitorLock('session_monitor_sync', this.instanceId).catch((err) => {
+          console.error('[SessionMonitor] releaseMonitorLock failed:', err instanceof Error ? err.message : err);
+        });
+      }
     }
   }
 

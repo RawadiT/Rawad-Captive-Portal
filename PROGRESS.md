@@ -1,10 +1,10 @@
-# PROGRESS.md — Fifth Audit Remediation
+# PROGRESS.md — Sixth Audit Remediation
 
-**Baseline Commit:** `79c360b8108036e8cc2c5f64cf2d5b808bee31bd`  
+**Baseline Commit:** `de61fa5793d5cece616fb6c3fc036b09d879a385`  
 **Status:** Complete Locally (Live Supabase & MikroTik Tests NOT RUN — Not Deployed)
 
-- **A5.1:** Removed `allow-remote-requests=false` condition from `routeros/deploy.rsc` DNS gate; added exact WAN interface resolution (`WAN` interface-list + `%` parsing on active default routes) and top-to-bottom `chain=input` rule-order bypass detection for TCP and UDP port 53.
-- **A5.2:** Replaced fire-and-forget `setInterval` in `QuotaService.withLeaseRenewal` with tracked, awaitable recursive renewal that aborts provisioning via `LeaseLostError` on lease loss/failure and triggers `compensateFailedProvisioning` (strict MikroTik revoke + DB cleanup/`revocation_pending`). Hardened `reclaim_expired_provisioning_leases()` with `FOR UPDATE SKIP LOCKED`.
-- **A5.3:** Prevented overlapping `SessionMonitor.syncSessions()` executions via `syncInFlight` coalescing + `setTimeout` scheduling; added PostgreSQL `monitor_locks` lease (`try_acquire_monitor_lock` / `release_monitor_lock`) for cross-process and crash-recovery coordination; added DB status update retries and non-fatal error handling after MikroTik revoke.
-- **A5.4:** Updated `routeros/deploy.rsc` to record exact `.id` (`rawadId*`) and parameters in `rawad-portal-state`, and `routeros/rollback.rsc` to delete ONLY resources matching both exact `.id` and unmodified properties.
-- **A5.5:** Verified Backend `tsc`, Frontend `tsc --noEmit` & `next build`, Fifth Audit verification suite (`verify_fifth_audit.mjs`), and `build-usb-package.ps1` + USB smoke test.
+- **A6.1:** Hardened `QuotaService.withLeaseRenewal` against late MikroTik completion after lease loss (bounded grace wait + `revocation_pending` & post-settlement compensating revoke if still in flight).
+- **A6.2:** Added periodic PostgreSQL `session_monitor_sync` lock renewal during long `SessionMonitor.syncSessions()` cycles and safe mutation abort on lock loss.
+- **A6.3:** Secured `rawad-portal-state` ownership in `deploy.rsc` & `rollback.rsc` via exact `.id` (`rawadIdStateScript`) and `rawadStateBodyLen` verification.
+- **A6.4:** Added pre-restore comparison against `rawadSetDnsRemote`, `rawadSetWwwSsl*`, `rawadSetTz`, and `rawadSetNtpEn` in `rollback.rsc` so manual admin changes after deploy are preserved.
+- **A6.5:** Added dependency checks and `:do { ... } on-error={ ... }` isolation in `rollback.rsc`; verified Backend/Frontend builds, Sixth Audit verification suite, and USB package smoke test.

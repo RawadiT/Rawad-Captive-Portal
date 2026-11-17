@@ -193,6 +193,7 @@
 :local crV6Fwd false
 :local crV6In false
 
+:local idStateScript ""
 :local idIpAddr ""
 :local idPool ""
 :local idDhcpOpt ""
@@ -254,7 +255,7 @@
       ":global rawadPrevWwwSslCert \"" . $prevWwwSslCert . "\";\n" . \
       ":global rawadPrevTz \"" . $prevTz . "\";\n" . \
       ":global rawadPrevNtpEn " . $prevNtpEn . ";")
-    /system script add name="rawad-portal-state" source=$initSrc comment="rawad-guest-portal-state"
+    :set idStateScript [/system script add name="rawad-portal-state" source=$initSrc comment="rawad-guest-portal-state"]
 }
 
 :put "=== [3/10] Assigning Guest Gateway IP 192.168.20.1/24 on ether10 ==="
@@ -352,18 +353,25 @@
 }
 /ip service set www-ssl disabled=no certificate=$mikrotikCertName address=($backendServerIp . "/32")
 
-:if ($isInitialDeploy) do={
-    :local finalSrc (":global rawadPrevDnsRemote " . $prevDns . ";\n" . \
+:if ($isInitialDeploy && $idStateScript != "") do={
+    :local stateBody (":global rawadPrevDnsRemote " . $prevDns . ";\n" . \
       ":global rawadPrevWwwSslDis " . $prevWwwSslDis . ";\n" . \
       ":global rawadPrevWwwSslAddr \"" . $prevWwwSslAddr . "\";\n" . \
       ":global rawadPrevWwwSslCert \"" . $prevWwwSslCert . "\";\n" . \
       ":global rawadPrevTz \"" . $prevTz . "\";\n" . \
       ":global rawadPrevNtpEn " . $prevNtpEn . ";\n" . \
+      ":global rawadSetDnsRemote true;\n" . \
+      ":global rawadSetWwwSslDis false;\n" . \
+      ":global rawadSetWwwSslAddr \"" . $backendServerIp . "/32\";\n" . \
+      ":global rawadSetWwwSslCert \"" . $mikrotikCertName . "\";\n" . \
+      ":global rawadSetTz \"Asia/Baghdad\";\n" . \
+      ":global rawadSetNtpEn true;\n" . \
       ":global rawadGuestIf \"" . $guestIf . "\";\n" . \
       ":global rawadGuestGw \"" . $guestGw . "\";\n" . \
       ":global rawadGuestNet \"" . $guestNet . "\";\n" . \
       ":global rawadBackendIp \"" . $backendServerIp . "\";\n" . \
       ":global rawadPortalDomain \"" . $portalDomain . "\";\n" . \
+      ":global rawadIdStateScript \"" . $idStateScript . "\";\n" . \
       ":global rawadCreatedIpAddr " . $crIpAddr . "; :global rawadIdIpAddr \"" . $idIpAddr . "\";\n" . \
       ":global rawadCreatedPool " . $crPool . "; :global rawadIdPool \"" . $idPool . "\";\n" . \
       ":global rawadCreatedDhcpOpt " . $crDhcpOpt . "; :global rawadIdDhcpOpt \"" . $idDhcpOpt . "\";\n" . \
@@ -386,7 +394,11 @@
       ":global rawadCreatedFwMgmt " . $crFwMgmt . "; :global rawadIdFwMgmt \"" . $idFwMgmt . "\";\n" . \
       ":global rawadCreatedV6Fwd " . $crV6Fwd . "; :global rawadIdV6Fwd \"" . $idV6Fwd . "\";\n" . \
       ":global rawadCreatedV6In " . $crV6In . "; :global rawadIdV6In \"" . $idV6In . "\";")
-    /system script set [find where name="rawad-portal-state"] source=$finalSrc
+    :local stateBodyLen [:len $stateBody]
+    :local finalSrc ($stateBody . "\n:global rawadStateBodyLen " . $stateBodyLen . ";")
+    :if ([:len [/system script find where .id=$idStateScript && name="rawad-portal-state" && comment="rawad-guest-portal-state"]] > 0) do={
+        /system script set $idStateScript source=$finalSrc
+    }
 }
 
 :put "=== DEPLOYMENT COMPLETE (ether10 ONLY) ==="
