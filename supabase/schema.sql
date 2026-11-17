@@ -260,7 +260,7 @@ BEGIN
 
   INSERT INTO public.free_quotas (mac_address, started_at, expires_at)
   VALUES (v_sess.mac_address, v_now, v_now + make_interval(secs => p_duration_seconds))
-  ON CONFLICT (mac_address) DO NOTHING
+  ON CONFLICT ON CONSTRAINT free_quotas_pkey DO NOTHING
   RETURNING * INTO v_fq;
 
   IF FOUND THEN
