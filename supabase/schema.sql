@@ -1,5 +1,5 @@
 -- ==============================================================================
--- RAWAD TECH CAPTIVE PORTAL — SUPABASE POSTGRESQL SCHEMA (HARDENED + MIGRATION)
+-- RAWAD TECH CAPTIVE PORTAL — SUPABASE POSTGRESQL SCHEMA (THIRD AUDIT HARDENED)
 -- Single source of truth (Online Supabase PostgreSQL via HTTPS).
 -- Idempotent for both fresh installs and upgrades from prior schema versions.
 -- ==============================================================================
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS public.free_quotas (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 4. Active / provisioning / historical sessions
+-- 4. Active / provisioning / revocation_pending / historical sessions
 CREATE TABLE IF NOT EXISTS public.sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   session_type TEXT NOT NULL CHECK (session_type IN ('free', 'user')),
@@ -47,11 +47,14 @@ CREATE TABLE IF NOT EXISTS public.sessions (
   hotspot_profile TEXT NOT NULL,
   started_at TIMESTAMPTZ NOT NULL,
   expires_at TIMESTAMPTZ NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('provisioning', 'active', 'expired', 'disconnected')),
+  lease_expires_at TIMESTAMPTZ NULL,
+  status TEXT NOT NULL CHECK (status IN ('provisioning', 'active', 'expired', 'disconnected', 'revocation_pending')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Safe idempotent upgrade for existing sessions constraint & partial unique indexes
+-- Safe idempotent upgrade for existing sessions columns, constraints & partial unique indexes
+ALTER TABLE public.sessions ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMPTZ NULL;
+
 DO $$
 BEGIN
   IF EXISTS (
@@ -61,7 +64,8 @@ BEGIN
     ALTER TABLE public.sessions DROP CONSTRAINT sessions_status_check;
   END IF;
   ALTER TABLE public.sessions
-    ADD CONSTRAINT sessions_status_check CHECK (status IN ('provisioning', 'active', 'expired', 'disconnected'));
+    ADD CONSTRAINT sessions_status_check
+    CHECK (status IN ('provisioning', 'active', 'expired', 'disconnected', 'revocation_pending'));
 END $$;
 
 CREATE INDEX IF NOT EXISTS idx_sessions_mac_status ON public.sessions (mac_address, status);
@@ -71,12 +75,12 @@ CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON public.sessions (expires_a
 DROP INDEX IF EXISTS public.idx_sessions_one_active_free_mac;
 CREATE UNIQUE INDEX idx_sessions_one_active_free_mac
   ON public.sessions (mac_address)
-  WHERE status IN ('provisioning', 'active') AND session_type = 'free';
+  WHERE status IN ('provisioning', 'active', 'revocation_pending') AND session_type = 'free';
 
 DROP INDEX IF EXISTS public.idx_sessions_one_active_user;
 CREATE UNIQUE INDEX idx_sessions_one_active_user
   ON public.sessions (user_id)
-  WHERE status IN ('provisioning', 'active') AND session_type = 'user';
+  WHERE status IN ('provisioning', 'active', 'revocation_pending') AND session_type = 'user';
 
 -- ==============================================================================
 -- ROW LEVEL SECURITY & PRIVILEGE HARDENING
@@ -90,7 +94,7 @@ REVOKE ALL ON TABLE public.admins, public.users, public.free_quotas, public.sess
 GRANT ALL ON TABLE public.admins, public.users, public.free_quotas, public.sessions TO service_role;
 
 -- ==============================================================================
--- R2.2: LEGACY RPC PRIVILEGE REVOCATION & SAFE CLEANUP (IDEMPOTENT)
+-- LEGACY RPC PRIVILEGE REVOCATION & SAFE CLEANUP (IDEMPOTENT)
 -- ==============================================================================
 DO $$
 BEGIN
@@ -114,12 +118,9 @@ BEGIN
 END $$;
 
 -- ==============================================================================
--- R2.3: 3-STEP POSTGRESQL-LOCKED PROVISIONING & FINALIZATION RPCS
--- Ensures concurrency locking ACROSS MikroTik provisioning without prematurely
--- consuming free_quotas or starting users.started_at if MikroTik fails.
+-- 3-STEP POSTGRESQL-LOCKED PROVISIONING & LEASE-VALIDATED FINALIZATION RPCS
 -- ==============================================================================
 
--- Step 1 (Free): Acquire PostgreSQL lock + insert 'provisioning' row (does NOT write free_quotas yet)
 CREATE OR REPLACE FUNCTION public.begin_free_provisioning(
   p_mac TEXT,
   p_ip TEXT,
@@ -157,15 +158,20 @@ BEGIN
 
   PERFORM pg_advisory_xact_lock(hashtext('free:' || v_mac));
 
-  -- Expire stale crashed 'provisioning' locks older than 30 seconds
+  -- Only transition expired-lease provisioning rows (> 2 min) to revocation_pending (never prematurely at 30s)
   UPDATE public.sessions s
-  SET status = 'disconnected'
-  WHERE s.mac_address = v_mac AND s.session_type = 'free' AND s.status = 'provisioning'
-    AND s.created_at < v_now - INTERVAL '30 seconds';
+  SET status = 'revocation_pending'
+  WHERE s.mac_address = v_mac
+    AND s.session_type = 'free'
+    AND s.status = 'provisioning'
+    AND s.lease_expires_at IS NOT NULL
+    AND s.lease_expires_at < v_now;
 
   SELECT * INTO v_active
   FROM public.sessions s
-  WHERE s.mac_address = v_mac AND s.session_type = 'free' AND s.status IN ('provisioning', 'active')
+  WHERE s.mac_address = v_mac
+    AND s.session_type = 'free'
+    AND s.status IN ('provisioning', 'active', 'revocation_pending')
   LIMIT 1;
 
   IF FOUND THEN
@@ -186,10 +192,10 @@ BEGIN
 
   INSERT INTO public.sessions (
     session_type, user_id, mac_address, ip_address, hotspot_username, hotspot_profile,
-    started_at, expires_at, status
+    started_at, expires_at, lease_expires_at, status
   ) VALUES (
     'free', NULL, v_mac, TRIM(p_ip), TRIM(p_hs_user), TRIM(p_hs_profile),
-    v_now, v_now + make_interval(secs => v_rem), 'provisioning'
+    v_now, v_now + make_interval(secs => v_rem), v_now + INTERVAL '2 minutes', 'provisioning'
   )
   RETURNING id INTO v_sess_id;
 
@@ -197,7 +203,6 @@ BEGIN
 END;
 $$;
 
--- Step 3 (Free): Called ONLY AFTER MikroTik succeeded; commits free_quotas & flips session to 'active'
 CREATE OR REPLACE FUNCTION public.finalize_free_session(
   p_session_id UUID,
   p_duration_seconds INTEGER DEFAULT 1800
@@ -230,6 +235,9 @@ BEGIN
   IF NOT FOUND OR v_sess.status <> 'provisioning' THEN
     RAISE EXCEPTION 'Provisioning session not found or already finalized';
   END IF;
+  IF v_sess.lease_expires_at IS NOT NULL AND v_sess.lease_expires_at < v_now THEN
+    RAISE EXCEPTION 'Provisioning reservation lease expired before finalization';
+  END IF;
 
   PERFORM pg_advisory_xact_lock(hashtext('free:' || v_sess.mac_address));
 
@@ -247,20 +255,19 @@ BEGIN
   END IF;
 
   IF v_rem <= 0 THEN
-    UPDATE public.sessions SET status = 'expired' WHERE id = p_session_id;
+    UPDATE public.sessions SET status = 'revocation_pending' WHERE id = p_session_id;
     RETURN QUERY SELECT false, false, p_session_id, v_sess.mac_address, v_fq.started_at, v_fq.expires_at, 0;
     RETURN;
   END IF;
 
   UPDATE public.sessions
-  SET status = 'active', started_at = v_fq.started_at, expires_at = v_fq.expires_at
+  SET status = 'active', started_at = v_fq.started_at, expires_at = v_fq.expires_at, lease_expires_at = NULL
   WHERE id = p_session_id;
 
   RETURN QUERY SELECT true, v_is_new, p_session_id, v_sess.mac_address, v_fq.started_at, v_fq.expires_at, v_rem;
 END;
 $$;
 
--- Step 1 (User): Acquire PostgreSQL lock + check user + insert 'provisioning' row (does NOT set started_at yet)
 CREATE OR REPLACE FUNCTION public.begin_user_provisioning(
   p_user_id UUID,
   p_mac TEXT,
@@ -313,25 +320,28 @@ BEGIN
     RETURN;
   END IF;
 
-  -- Expire stale crashed 'provisioning' locks older than 30 seconds
   UPDATE public.sessions s
-  SET status = 'disconnected'
-  WHERE s.user_id = p_user_id AND s.status = 'provisioning' AND s.created_at < v_now - INTERVAL '30 seconds';
+  SET status = 'revocation_pending'
+  WHERE s.user_id = p_user_id
+    AND s.status = 'provisioning'
+    AND s.lease_expires_at IS NOT NULL
+    AND s.lease_expires_at < v_now;
 
   IF EXISTS (
     SELECT 1 FROM public.sessions s
-    WHERE s.user_id = p_user_id AND s.status IN ('provisioning', 'active')
+    WHERE s.user_id = p_user_id AND s.status IN ('provisioning', 'active', 'revocation_pending')
   ) THEN
-    RAISE EXCEPTION 'Concurrent or active session exists; revoke prior session first';
+    RAISE EXCEPTION 'Concurrent, active, or revocation-pending session exists for this account';
   END IF;
 
   INSERT INTO public.sessions (
     session_type, user_id, mac_address, ip_address, hotspot_username, hotspot_profile,
-    started_at, expires_at, status
+    started_at, expires_at, lease_expires_at, status
   ) VALUES (
     'user', p_user_id, v_mac, TRIM(p_ip), TRIM(p_hs_user), TRIM(p_hs_profile),
     COALESCE(v_user.started_at, v_now),
     COALESCE(v_user.expires_at, v_now + make_interval(mins => v_user.duration_minutes)),
+    v_now + INTERVAL '2 minutes',
     'provisioning'
   )
   RETURNING id INTO v_sess_id;
@@ -340,7 +350,6 @@ BEGIN
 END;
 $$;
 
--- Step 3 (User): Called ONLY AFTER MikroTik succeeded; sets started_at/expires_at on first login & flips to 'active'
 CREATE OR REPLACE FUNCTION public.finalize_user_session(
   p_session_id UUID
 )
@@ -369,12 +378,15 @@ BEGIN
   IF NOT FOUND OR v_sess.status <> 'provisioning' OR v_sess.user_id IS NULL THEN
     RAISE EXCEPTION 'Provisioning session not found or already finalized';
   END IF;
+  IF v_sess.lease_expires_at IS NOT NULL AND v_sess.lease_expires_at < v_now THEN
+    RAISE EXCEPTION 'Provisioning reservation lease expired before finalization';
+  END IF;
 
   PERFORM pg_advisory_xact_lock(hashtext('user:' || v_sess.user_id::TEXT));
 
   SELECT * INTO v_user FROM public.users u WHERE u.id = v_sess.user_id FOR UPDATE;
   IF NOT FOUND OR v_user.is_disabled THEN
-    UPDATE public.sessions SET status = 'disconnected' WHERE id = p_session_id;
+    UPDATE public.sessions SET status = 'revocation_pending' WHERE id = p_session_id;
     RETURN QUERY SELECT false, p_session_id, NULL::TIMESTAMPTZ, NULL::TIMESTAMPTZ, 0;
     RETURN;
   END IF;
@@ -388,20 +400,19 @@ BEGIN
 
   v_rem := GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (v_user.expires_at - v_now)))::INTEGER);
   IF v_rem <= 0 THEN
-    UPDATE public.sessions SET status = 'expired' WHERE id = p_session_id;
+    UPDATE public.sessions SET status = 'revocation_pending' WHERE id = p_session_id;
     RETURN QUERY SELECT false, p_session_id, v_user.started_at, v_user.expires_at, 0;
     RETURN;
   END IF;
 
   UPDATE public.sessions
-  SET status = 'active', started_at = v_user.started_at, expires_at = v_user.expires_at
+  SET status = 'active', started_at = v_user.started_at, expires_at = v_user.expires_at, lease_expires_at = NULL
   WHERE id = p_session_id;
 
   RETURN QUERY SELECT true, p_session_id, v_user.started_at, v_user.expires_at, v_rem;
 END;
 $$;
 
--- Recovery RPC: Release 'provisioning' lock if MikroTik provisioning failed
 CREATE OR REPLACE FUNCTION public.abort_provisioning(
   p_session_id UUID
 )
@@ -412,8 +423,23 @@ SET search_path = pg_catalog, public
 AS $$
 BEGIN
   UPDATE public.sessions
-  SET status = 'disconnected'
+  SET status = 'disconnected', lease_expires_at = NULL
   WHERE id = p_session_id AND status = 'provisioning';
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.mark_revocation_pending(
+  p_session_id UUID
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  UPDATE public.sessions
+  SET status = 'revocation_pending', lease_expires_at = NULL
+  WHERE id = p_session_id AND status IN ('provisioning', 'active');
 END;
 $$;
 
@@ -431,3 +457,6 @@ GRANT EXECUTE ON FUNCTION public.finalize_user_session(UUID) TO service_role;
 
 REVOKE ALL ON FUNCTION public.abort_provisioning(UUID) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.abort_provisioning(UUID) TO service_role;
+
+REVOKE ALL ON FUNCTION public.mark_revocation_pending(UUID) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.mark_revocation_pending(UUID) TO service_role;

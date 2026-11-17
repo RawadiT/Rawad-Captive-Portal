@@ -1,10 +1,10 @@
-# PROGRESS.md — Second Independent Audit Remediation
+# PROGRESS.md — Third Audit Remediation
 
-**Baseline Commit:** `0242e3ca46f7864554097033c7041217dceef2d3`  
+**Baseline Commit:** `2acf6f356922302de393cd4cdc88e27f6953de22`  
 **Status:** Complete Locally (Live Supabase & MikroTik Tests NOT RUN — Not Deployed)
 
-- **R2.1:** `grantHotspotAccess` now binds `mac-address` ONLY when `bindMac=true` (free quota), never on ordinary accounts (`bindMac=false`); `revokeHotspotAccess` matches `a.user === input.username && (!macUpper || a['mac-address'] === macUpper)` so unrelated accounts sharing a MAC are never disconnected.
-- **R2.2:** Added idempotent legacy RPC privilege revocation & `DROP FUNCTION IF EXISTS` for `claim_free_quota(TEXT, INTEGER)` and `activate_user_on_first_login(UUID)`, plus `'provisioning'` status and partial unique indexes covering `('provisioning', 'active')`.
-- **R2.3:** Implemented 3-step PostgreSQL-locked provisioning (`begin_*_provisioning` -> MikroTik -> `finalize_*_session` / `abort_provisioning`), partial RouterOS resource cleanup on failure, and strict fail-loud revocation before marking DB sessions disconnected.
-- **R2.4:** Added individual firewall rule ownership flags (`rawadCreatedFw*`, `rawadCreatedV6*`), pre-existing `rawad-*` conflict abort, DNS open-resolver preflight notice, and ownership-gated `rollback.rsc`.
-- **R2.5:** Bound `127.0.0.1:4000:4000` in `deployment/docker-compose.yml` and aligned `DEPLOYMENT.md`.
+- **A3.1:** Added `lease_expires_at` (2-minute reservation lease), `'revocation_pending'` status, lease expiration validation in `finalize_free_session` / `finalize_user_session`, and `mark_revocation_pending` RPC in `supabase/schema.sql`.
+- **A3.2:** Removed `.catch(() => {})` from compensating revocations in `quotaService.ts`, transitioned failed revocations to `'revocation_pending'`, and updated `SessionMonitor` to retry `'revocation_pending'` and never mark `'expired'`/`'disconnected'` before RouterOS revocation succeeds.
+- **A3.3:** Removed runtime user/profile deletion (`rawad-guest-portal-managed`) from `routeros/rollback.rsc`.
+- **A3.4:** Added mandatory DNS open-resolver abort gate in `routeros/deploy.rsc` before enabling `allow-remote-requests=yes` without modifying WAN.
+- **A3.5:** Aligned `DEPLOYMENT.md` with the 3-step provisioning & recovery RPCs.

@@ -79,9 +79,12 @@ export interface DatabaseClient {
 
   abortProvisioning(sessionId: string): Promise<void>;
 
+  markRevocationPending(sessionId: string): Promise<void>;
+
   // Sessions
   getActiveSessionByMac(macAddress: string): Promise<SessionRecord | null>;
   listActiveSessions(): Promise<SessionRecord[]>;
+  listRevocationPendingSessions(): Promise<SessionRecord[]>;
   listActiveSessionsByUserId(userId: string): Promise<SessionRecord[]>;
   updateSessionStatus(id: string, status: SessionStatus): Promise<void>;
 }

@@ -1,5 +1,5 @@
 export type SessionType = 'free' | 'user';
-export type SessionStatus = 'provisioning' | 'active' | 'expired' | 'disconnected';
+export type SessionStatus = 'provisioning' | 'active' | 'expired' | 'disconnected' | 'revocation_pending';
 
 export interface AdminRecord {
   id: string;

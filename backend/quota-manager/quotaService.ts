@@ -179,7 +179,15 @@ export class QuotaService {
     try {
       const finalized = await this.db.finalizeFreeSession(begin.session_id, this.cfg.freeQuotaSeconds);
       if (!finalized.allowed || finalized.remaining_seconds <= 0) {
-        await this.revokeStrictWithRetry(hotspotUsername, mac, hotspotProfile);
+        try {
+          await this.revokeStrictWithRetry(hotspotUsername, mac, hotspotProfile);
+          await this.db.abortProvisioning(begin.session_id);
+        } catch (revErr) {
+          await this.db.markRevocationPending(begin.session_id).catch((e) =>
+            console.error('[CRITICAL] markRevocationPending failed:', e)
+          );
+          throw revErr;
+        }
         throw new ForbiddenError('تم استهلاك الحصة المجانية (30 دقيقة) لهذا الجهاز مسبقاً.');
       }
 
@@ -203,8 +211,17 @@ export class QuotaService {
         resumed: !finalized.is_new,
       };
     } catch (err) {
-      await this.revokeStrictWithRetry(hotspotUsername, mac, hotspotProfile).catch(() => {});
-      await this.db.abortProvisioning(begin.session_id).catch(() => {});
+      if (!(err instanceof ForbiddenError)) {
+        try {
+          await this.revokeStrictWithRetry(hotspotUsername, mac, hotspotProfile);
+          await this.db.abortProvisioning(begin.session_id);
+        } catch (revErr) {
+          console.error('[CRITICAL] Compensating MikroTik revoke failed; marking revocation_pending:', revErr);
+          await this.db.markRevocationPending(begin.session_id).catch((e) =>
+            console.error('[CRITICAL] markRevocationPending failed:', e)
+          );
+        }
+      }
       throw err;
     }
   }
@@ -280,7 +297,15 @@ export class QuotaService {
     try {
       const finalized = await this.db.finalizeUserSession(begin.session_id);
       if (!finalized.allowed || !finalized.started_at || !finalized.expires_at || finalized.remaining_seconds <= 0) {
-        await this.revokeStrictWithRetry(hotspotUsername, mac, hotspotProfile);
+        try {
+          await this.revokeStrictWithRetry(hotspotUsername, mac, hotspotProfile);
+          await this.db.abortProvisioning(begin.session_id);
+        } catch (revErr) {
+          await this.db.markRevocationPending(begin.session_id).catch((e) =>
+            console.error('[CRITICAL] markRevocationPending failed:', e)
+          );
+          throw revErr;
+        }
         throw new ForbiddenError('انتهت صلاحية هذا الحساب أو تم تعطيله');
       }
 
@@ -310,8 +335,17 @@ export class QuotaService {
         remainingSeconds: finalized.remaining_seconds,
       };
     } catch (err) {
-      await this.revokeStrictWithRetry(hotspotUsername, mac, hotspotProfile).catch(() => {});
-      await this.db.abortProvisioning(begin.session_id).catch(() => {});
+      if (!(err instanceof ForbiddenError)) {
+        try {
+          await this.revokeStrictWithRetry(hotspotUsername, mac, hotspotProfile);
+          await this.db.abortProvisioning(begin.session_id);
+        } catch (revErr) {
+          console.error('[CRITICAL] Compensating MikroTik revoke failed; marking revocation_pending:', revErr);
+          await this.db.markRevocationPending(begin.session_id).catch((e) =>
+            console.error('[CRITICAL] markRevocationPending failed:', e)
+          );
+        }
+      }
       throw err;
     }
   }

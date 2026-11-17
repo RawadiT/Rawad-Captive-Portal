@@ -56,9 +56,8 @@
     /ip firewall nat remove [find where comment="rawad-guest-portal-nat"]
 }
 
-# 2. Remove dynamically created project-managed HotSpot users & profiles only
-/ip hotspot user remove [find where comment="rawad-guest-portal-managed"]
-/ip hotspot user profile remove [find where comment="rawad-guest-portal-managed"]
+# 2. Remove HotSpot Server, Profile & Walled Garden only if created by deploy.rsc
+# (Do NOT delete runtime application users/sessions during infrastructure rollback)
 
 :if ($rawadCreatedHsSrv = true) do={
     /ip hotspot remove [find where name="rawad-guest-hotspot"]

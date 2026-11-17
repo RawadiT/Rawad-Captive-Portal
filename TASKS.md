@@ -1,10 +1,10 @@
-# TASKS.md — Second Independent Audit Remediation
+# TASKS.md — Third Audit Remediation
 
-**Baseline Commit:** `0242e3ca46f7864554097033c7041217dceef2d3`
+**Baseline Commit:** `2acf6f356922302de393cd4cdc88e27f6953de22`
 
-- [x] **R2.1** Remove MAC binding from ordinary accounts (`restClient.ts`, `adapter.ts`, `quotaService.ts`) & prevent cross-account MAC disconnect in `revokeHotspotAccess`.
-- [x] **R2.2** Add idempotent legacy RPC privilege revocation & cleanup (`claim_free_quota`, `activate_user_on_first_login`) + `provisioning` lock state in `supabase/schema.sql`.
-- [x] **R2.3** Implement 3-step PostgreSQL-locked provisioning (`begin_*_provisioning` -> MikroTik -> `finalize_*_session` / `abort_provisioning`) + partial MikroTik cleanup + fail-loud revocation in `restClient.ts`, `quotaService.ts`, `sessionMonitor.ts`.
-- [x] **R2.4** Individual firewall rule ownership tracking, pre-existing name conflict abort, DNS open-resolver preflight check, and safe `rollback.rsc` in `routeros/*.rsc`.
-- [x] **R2.5** Bind `127.0.0.1:4000:4000` in `deployment/docker-compose.yml` and align `DEPLOYMENT.md`.
-- [x] **R2.6** Run all local builds & static validations, rebuild `usb-package/`, commit & push to `main`.
+- [x] **A3.1** Fix PostgreSQL provisioning lease (`lease_expires_at`, no 30s premature release, validate lease in `finalize_*`, add `'revocation_pending'` status) in `supabase/schema.sql`.
+- [x] **A3.2** Fix failure recovery in `quotaService.ts` & `sessionMonitor.ts` (no `.catch(() => {})` on compensating revoke, keep `'revocation_pending'` if revoke fails, never mark `'expired'`/`'disconnected'` before RouterOS revoke succeeds).
+- [x] **A3.3** Remove runtime user/profile deletion from `routeros/rollback.rsc`; keep only `deploy.rsc`-owned resources.
+- [x] **A3.4** Add mandatory DNS open-resolver abort gate in `routeros/deploy.rsc` before setting `allow-remote-requests=yes` (without modifying WAN).
+- [x] **A3.5** Update `DEPLOYMENT.md` to match the 3-step RPCs (`begin_*`, `finalize_*`, `abort_provisioning`, `revocation_pending`).
+- [x] **A3.6** Run all builds, static validations, USB package validation, commit & push to `main`.

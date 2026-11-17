@@ -5,10 +5,10 @@
 - **الحصة المجانية:** 30 دقيقة مرة واحدة فقط لكل `MAC Address` بنظام `Wall-Clock` UTC (لا يوجد تجديد يومي).
 - **الحسابات المدفوعة/المخصصة:** تبدأ مدتها عند أول تسجيل دخول ناجح بنظام `Wall-Clock` UTC ولا ترتبط بـ `MAC`.
 - **فرض انتهاء الصلاحية:** يفرضه MikroTik فعلياً عبر `session-timeout` في Profile مخصص لكل جلسة (`comment="rawad-guest-portal-managed"`).
-- **تدفق المعاملات والاسترداد (Transaction & Failure-Recovery):**
-  1. يتحقق Backend أولاً (قراءة فقط) من الصلاحية دون استهلاك الحصة المجانية أو بدء `started_at` للحساب.
-  2. ينفّذ Backend تفعيل الجلسة على MikroTik أولاً؛ فإذا فشل MikroTik لا تُستهلك الحصة المجانية ولا تبدأ مدة الحساب.
-  3. ينفّذ Backend دالة PostgreSQL الذرية (`commit_free_session` أو `commit_user_session` المحمية بـ `pg_advisory_xact_lock` وفهارس الجلسة النشطة الفريدة). وإذا فشل الحفظ في Supabase، ينفّذ Backend إلغاءً تعويضياً فورياً على MikroTik.
+- **تدفق المعاملات والاسترداد ثلاثي المراحل (3-Step Transaction & Failure-Recovery):**
+  1. يستدعي Backend دالة PostgreSQL (`begin_free_provisioning` أو `begin_user_provisioning`) المحمية بـ `pg_advisory_xact_lock` وفهارس الجلسة الفريدة لحجز حالة `'provisioning'` (مع `lease_expires_at` مدته دقيقتان) **دون** استهلاك `free_quotas` أو بدء `started_at` للحساب بعد.
+  2. ينفّذ Backend تفعيل الجلسة على MikroTik أولاً؛ فإذا فشل MikroTik يستدعي `abort_provisioning` لتحرير الحجز دون استهلاك الحصة المجانية أو بدء مدة الحساب.
+  3. بعد نجاح MikroTik، يستدعي Backend دالة الاعتماد النهائي (`finalize_free_session` أو `finalize_user_session`) التي تتحقق من صلاحية الحجز وتثبّت الجلسة كـ `'active'`. وإذا فشل الاعتماد، ينفّذ Backend إلغاءً صارماً على MikroTik، وإذا تعذر الإلغاء أيضاً يُبقي الجلسة في حالة `'revocation_pending'` (دون تحريرها أو تجاهل الخطأ) ليُعيد `SessionMonitor` محاولة إلغائها تلقائياً حتى ينجح الإلغاء على الراوتر.
 
 ---
 

@@ -199,6 +199,13 @@ export class SupabaseDatabaseClient implements DatabaseClient {
     if (error) throw new Error(error.message);
   }
 
+  async markRevocationPending(sessionId: string): Promise<void> {
+    const { error } = await this.client.rpc('mark_revocation_pending', {
+      p_session_id: sessionId,
+    });
+    if (error) throw new Error(error.message);
+  }
+
   async getActiveSessionByMac(macAddress: string): Promise<SessionRecord | null> {
     const { data, error } = await this.client
       .from('sessions')
@@ -218,6 +225,16 @@ export class SupabaseDatabaseClient implements DatabaseClient {
       .select('*')
       .eq('status', 'active')
       .order('created_at', { ascending: false });
+    if (error) throw new Error(error.message);
+    return (data as SessionRecord[]) ?? [];
+  }
+
+  async listRevocationPendingSessions(): Promise<SessionRecord[]> {
+    const { data, error } = await this.client
+      .from('sessions')
+      .select('*')
+      .eq('status', 'revocation_pending')
+      .order('created_at', { ascending: true });
     if (error) throw new Error(error.message);
     return (data as SessionRecord[]) ?? [];
   }

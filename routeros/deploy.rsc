@@ -40,6 +40,9 @@
 :if ([:len [/certificate find where name=$mikrotikCertName]] = 0) do={
     :error ("ABORT: Certificate '" . $mikrotikCertName . "' not found. Import MikroTik TLS cert first.")
 }
+:if ([/ip dns get allow-remote-requests] = false && [:len [/ip firewall filter find where chain="input" && action="drop" && dst-port~"53" && disabled=no]] = 0) do={
+    :error "ABORT: Cannot enable allow-remote-requests=yes without an existing active input firewall rule dropping external DNS (port 53), which would expose an open resolver. Configure your WAN DNS drop rule manually before deploying."
+}
 
 # Never claim ownership of pre-existing non-project resources on initial deploy
 :if ([:len [/system script find where name="rawad-portal-state"]] = 0) do={
