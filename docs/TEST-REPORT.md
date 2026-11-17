@@ -7,34 +7,41 @@
 
 ---
 
-## 2. نتائج الاختبارات المنفذة محلياً — 24/24 اختباراً ناجحاً (0 فشل، 0 تخطي)
+## 2. نتائج الاختبارات المنفذة محلياً — 29/29 اختباراً ناجحاً (0 فشل، 0 تخطي)
+
+> **تنبيه شفافية:** اختبارات `mikrotik-script-audit.test.mjs` تستخدم تحليلاً بنيوياً ومحاكاة محلية لترتيب قواعد RouterOS وRollback، ولا تغني بأي حال عن الاختبار الفعلي على جهاز MikroTik RB4011 الحقيقي.
 
 | # | المجموعة | اسم الاختبار الفعلي | النتيجة |
 |---|---|---|---|
-| 1 | `device-compatibility` | `Local assets & offline readiness: no external CDN links in Guest Portal or HotSpot` | **نجاح** (`2.48ms`) |
-| 2 | `device-compatibility` | `RTL, viewport, and reduced-motion accessibility checks` | **نجاح** (`0.48ms`) |
-| 3 | `integration` | `Free 30-min lifecycle: grant, resume after disconnect, block 2nd grant same day, reset at 00:00 Baghdad` | **نجاح** (`45.00ms`) |
-| 4 | `integration` | `Session started before midnight Baghdad keeps original 30-min limit without extending or cutting` | **نجاح** (`40.06ms`) |
-| 5 | `integration` | `Concurrent free requests from same MAC only grant ONE quota` | **نجاح** (`38.10ms`) |
-| 6 | `integration` | `Backend restart persists consumed quota in SQLite` | **نجاح** (`51.98ms`) |
-| 7 | `integration` | `User login: cumulative quota (120m - 40m = 80m left), disabled, banned, unlimited, and terminate` | **نجاح** (`383.10ms`) |
-| 8 | `integration` | `Admin RBAC: regular admin cannot create/edit/disable super_admin, and audit logs are immutable` | **نجاح** (`84.72ms`) |
-| 9 | `performance` | `Performance: 50 concurrent guest grants & status checks complete within budget` (`165.4ms` للـ50 طلباً) | **نجاح** (`224.17ms`) |
-| 10 | `audit-regression` | `Audit 2: MAC/IP spoofing & unauthorized disconnect attempts are rejected (403)` | **نجاح** (`143.30ms`) |
-| 11 | `audit-regression` | `Audit 2b: Untrusted X-Forwarded-For cannot spoof client IP when trustProxy=false` | **نجاح** (`48.79ms`) |
-| 12 | `audit-regression` | `Audit 6: Session reconciliation on Wi-Fi drop & MikroTik reboot + orphan fail-closed sweep` | **نجاح** (`39.72ms`) |
-| 13 | `audit-regression` | `Audit 7: Database failure after MikroTik grant triggers compensating revoke (fail-closed)` | **نجاح** (`35.95ms`) |
-| 14 | `audit-regression` | `Audit 9: Production secrets validation rejects placeholders and insecure TLS settings` | **نجاح** (`0.36ms`) |
-| 15 | `audit-regression` | `Audit 1, 8, 10: Static verification of RouterOS safety, idempotency, IPv6 priority, Nginx isolation & pre-built Docker` | **نجاح** (`0.71ms`) |
-| 16 | `audit-regression` | `Audit CAPPORT: Unauthenticated and authenticated client CAPPORT API responses (RFC 8908)` | **نجاح** (`42.42ms`) |
-| 17 | `audit-regression` | `Audit CAPPORT IP Change: Same MAC with new IP in HotSpot Host Table retains active CAPPORT & status` | **نجاح** (`38.69ms`) |
-| 18 | `security` | `Security: Default Deny + MikroTik failure never grants internet or consumes quota` | **نجاح** (`37.82ms`) |
-| 19 | `security` | `Security: Admin endpoints reject unauthenticated requests (401) and enforce RBAC (403)` | **نجاح** (`238.78ms`) |
-| 20 | `simulation` | `End-to-End HTTP Simulation: Guest Free + Admin Dashboard + RFC 8908 Capport` | **نجاح** (`184.86ms`) |
-| 21 | `unit` | `Baghdad timezone date calculation rolls over at 00:00 Asia/Baghdad (21:00 UTC)` | **نجاح** (`1.87ms`) |
-| 22 | `unit` | `Password hashing uses scrypt with salt and timing-safe verification` | **نجاح** (`151.99ms`) |
-| 23 | `unit` | `Admin token signing, verification, and tamper rejection` | **نجاح** (`1.25ms`) |
-| 24 | `unit` | `MAC normalization and conservative device detection` | **نجاح** (`0.97ms`) |
+| 1 | `device-compatibility` | `Local assets & offline readiness: no external CDN links in Guest Portal or HotSpot` | **نجاح** (`3.39ms`) |
+| 2 | `device-compatibility` | `RTL, viewport, and reduced-motion accessibility checks` | **نجاح** (`0.64ms`) |
+| 3 | `integration` | `Free 30-min lifecycle: grant, resume after disconnect, block 2nd grant same day, reset at 00:00 Baghdad` | **نجاح** (`42.19ms`) |
+| 4 | `integration` | `Session started before midnight Baghdad keeps original 30-min limit without extending or cutting` | **نجاح** (`37.03ms`) |
+| 5 | `integration` | `Concurrent free requests from same MAC only grant ONE quota` | **نجاح** (`38.94ms`) |
+| 6 | `integration` | `Backend restart persists consumed quota in SQLite` | **نجاح** (`58.18ms`) |
+| 7 | `integration` | `User login: cumulative quota (120m - 40m = 80m left), disabled, banned, unlimited, and terminate` | **نجاح** (`412.22ms`) |
+| 8 | `integration` | `Admin RBAC: regular admin cannot create/edit/disable super_admin, and audit logs are immutable` | **نجاح** (`89.08ms`) |
+| 9 | `performance` | `Performance: 50 concurrent guest grants & status checks complete within budget` (`189.8ms` للـ50 طلباً) | **نجاح** (`253.31ms`) |
+| 10 | `audit-regression` | `Audit 2: MAC/IP spoofing & unauthorized disconnect attempts are rejected (403)` | **نجاح** (`137.74ms`) |
+| 11 | `audit-regression` | `Audit 2b: Untrusted X-Forwarded-For cannot spoof client IP when trustProxy=false` | **نجاح** (`62.70ms`) |
+| 12 | `audit-regression` | `Audit 6: Session reconciliation on Wi-Fi drop & MikroTik reboot + orphan fail-closed sweep` | **نجاح** (`37.66ms`) |
+| 13 | `audit-regression` | `Audit 7: Database failure after MikroTik grant triggers compensating revoke (fail-closed)` | **نجاح** (`40.98ms`) |
+| 14 | `audit-regression` | `Audit 9: Production secrets validation rejects placeholders and insecure TLS settings` | **نجاح** (`0.52ms`) |
+| 15 | `audit-regression` | `Audit 1, 8, 10: Static verification of RouterOS safety, idempotency, IPv6 priority, Nginx isolation & pre-built Docker` | **نجاح** (`1.17ms`) |
+| 16 | `audit-regression` | `Audit CAPPORT: Unauthenticated and authenticated client CAPPORT API responses (RFC 8908)` | **نجاح** (`46.96ms`) |
+| 17 | `audit-regression` | `Audit CAPPORT IP Change: Same MAC with new IP in HotSpot Host Table retains active CAPPORT & status` | **نجاح** (`40.45ms`) |
+| 18 | `mikrotik-script-audit` | `RouterOS Structural Simulation: Forward chain allows Portal 443 BEFORE dropping Staff/Admin/Private/DNS` | **نجاح** (`3.19ms`) |
+| 19 | `mikrotik-script-audit` | `RouterOS Structural Simulation: Input chain allows Backend REST API & blocks Guest RouterOS Mgmt; IPv6 drops at top` | **نجاح** (`0.64ms`) |
+| 20 | `mikrotik-script-audit` | `RouterOS Security & Idempotency: API password gate, no password logging, and duplicate-free re-run` | **نجاح** (`0.91ms`) |
+| 21 | `mikrotik-script-audit` | `RouterOS Rollback: Full ownership checks & restoration of DNS, www-ssl, NTP, and Timezone` | **نجاح** (`0.96ms`) |
+| 22 | `mikrotik-script-audit` | `Docker Binding & Certificate Renewal Safety` | **نجاح** (`0.19ms`) |
+| 23 | `security` | `Security: Default Deny + MikroTik failure never grants internet or consumes quota` | **نجاح** (`38.70ms`) |
+| 24 | `security` | `Security: Admin endpoints reject unauthenticated requests (401) and enforce RBAC (403)` | **نجاح** (`266.77ms`) |
+| 25 | `simulation` | `End-to-End HTTP Simulation: Guest Free + Admin Dashboard + RFC 8908 Capport` | **نجاح** (`192.64ms`) |
+| 26 | `unit` | `Baghdad timezone date calculation rolls over at 00:00 Asia/Baghdad (21:00 UTC)` | **نجاح** (`1.87ms`) |
+| 27 | `unit` | `Password hashing uses scrypt with salt and timing-safe verification` | **نجاح** (`142.20ms`) |
+| 28 | `unit` | `Admin token signing, verification, and tamper rejection` | **نجاح** (`1.16ms`) |
+| 29 | `unit` | `MAC normalization and conservative device detection` | **نجاح** (`1.00ms`) |
 
 ### نتائج بناء التطبيقات:
 - `backend` (`npm run build` / `tsc`): **نجاح**.

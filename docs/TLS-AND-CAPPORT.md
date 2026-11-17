@@ -32,10 +32,10 @@
 ---
 
 ## 4. تجديد شهادة DNS-01 وإعادة تحميل Nginx
-- يوفر [renew-cert.sh](file:///c:/Users/Hashim/Desktop/Captive%20Portal%20Rawad%20Tech/deployment/tls/renew-cert.sh) مسارين:
-  1. **تجديد آلي بالكامل:** عبر `acme.sh` ومزود DNS API مع حفظ مفاتيح DNS API في ملف `deployment/tls/.dns-credentials.env` بصلاحيات `chmod 600`.
-  2. **تجديد يدوي (إذا لم يدعم مزود DNS واجهة API):** تحديث سجل `_acme-challenge` TXT يدوياً كل 60–90 يوماً عبر `certbot certonly --manual --preferred-challenges dns` ثم نسخ `fullchain.pem` و`privkey.pem` وتنفيذ إعادة التحميل.
-- **إعادة تحميل Nginx دون توقف:** ينفذ السكربت `docker exec rawad-tls-proxy nginx -t && docker exec rawad-tls-proxy nginx -s reload`.
+- يوفر [renew-cert.sh](file:///c:/Users/Hashim/Desktop/Captive%20Portal%20Rawad%20Tech/deployment/tls/renew-cert.sh) مسارين مع حماية ذرية للشهادة الحالية:
+  1. **تجديد آلي بالكامل (Cron):** عبر `acme.sh` ومزود DNS API مع حفظ مفاتيح DNS API في `deployment/tls/.dns-credentials.env` بصلاحيات `chmod 600` وتثبيت الجدولة اليومية عبر `./deployment/tls/renew-cert.sh --install-cron`.
+  2. **تجديد يدوي (إذا لم يدعم مزود DNS واجهة API):** تحديث سجل `_acme-challenge` TXT يدوياً كل 60–90 يوماً عبر `certbot certonly --manual --preferred-challenges dns` ثم نسخ `fullchain.pem` و`privkey.pem` وتشغيل `./deployment/tls/renew-cert.sh`.
+- **إعادة تحميل Nginx دون توقف وبأمان:** يتم التحقق أولاً من الشهادة ومطابقة المفتاح في مجلد مؤقت (`.staging`) ثم `docker exec rawad-tls-proxy nginx -t && docker exec rawad-tls-proxy nginx -s reload`؛ وإذا فشل أي فحص تُحفظ الشهادة القديمة دون إعادة تحميل Nginx.
 
 ---
 

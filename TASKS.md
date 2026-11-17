@@ -1,6 +1,6 @@
 # TASKS.md — خطة تنفيذ نظام Captive Portal (روتانا - شركة رواد التقنيات)
 
-تم تنفيذ واختبار جميع مراحل التطوير المحلية بنجاح بنسبة 100%.
+تم تنفيذ واختبار جميع مراحل التطوير المحلية بنجاح (بانتظار الاختبار الفعلي على MikroTik RB4011 والنطاق الحقيقي في الشركة قبل اعتماد الإنتاج).
 
 ---
 
@@ -53,4 +53,5 @@
 - [x] **T7.3** اختبارات الأمان (`tests/security/security.test.mjs`).
 - [x] **T7.4** اختبارات الأداء وتوافق الأجهزة (`tests/performance/perf.test.mjs`، `tests/device-compatibility/compatibility.test.mjs`).
 - [x] **T7.5** كتابة جميع الوثائق في `docs/`: `INSTALLATION.md`، `CONFIGURATION.md`، `SECURITY.md`، `TEST-REPORT.md`، `MIKROTIK-DEPLOYMENT.md`.
-- [x] **T7.6** المراجعة النهائية الشاملة ومراجعة توافق TLS/CAPPORT (النطاق الحقيقي، DNS-01، Split-Horizon DNS، إزالة OCSP واعتماد CRL، NTP، وتنظيف المراجع) وتحديث `PROGRESS.md`.
+- [x] **T7.6** المراجعة النهائية وإغلاق ملاحظات ما بعد الرفع (ترتيب Firewall في `deploy.rsc`، ملكية `rollback.rsc`، فحص كلمة مرور API، تقييد ربط Docker، تجديد الشهادة الآمن، ومحاكاة التحقق البنيوي) وتحديث `PROGRESS.md`.
+- [ ] **T8.1 (في الشركة)** تنفيذ الاختبارات الفعلية على MikroTik RB4011iGS+RM والنطاق الحقيقي وهواتف الزبائن قبل اعتماد الإنتاج.

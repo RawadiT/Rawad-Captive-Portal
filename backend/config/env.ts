@@ -49,6 +49,9 @@ export function validateProductionSecrets(cfg: AppConfig): void {
   if (!cfg.guestPortalOrigin || cfg.guestPortalOrigin.includes('.local') || cfg.guestPortalOrigin.includes('YOUR_COMPANY_DOMAIN')) {
     throw new Error('FATAL: GUEST_PORTAL_ORIGIN must be set to a real company-owned domain in production');
   }
+  if (process.env.GUEST_PROXY_BIND_IP === '0.0.0.0') {
+    throw new Error('FATAL: GUEST_PROXY_BIND_IP must not be 0.0.0.0 in production; bind to explicit server IP');
+  }
   if (cfg.mikrotikMode === 'rest') {
     if (!cfg.mikrotikPassword || INSECURE_PLACEHOLDERS.has(cfg.mikrotikPassword)) {
       throw new Error('FATAL: MIKROTIK_API_PASSWORD must be set and not a placeholder in production');

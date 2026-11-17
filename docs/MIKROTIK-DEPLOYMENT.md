@@ -22,7 +22,10 @@
 
 ## الخطوة 3: نسخ ملفات HotSpot وتشغيل الخادم
 1. انسخ محتويات مجلد `hotspot/` بالكامل إلى مجلد `hotspot` داخل MikroTik Files.
-2. عدّل كلمة مرور `rawad-api` داخل `routeros/deploy.rsc` و`deployment/.env` لتكونا متطابقتين.
+2. عدّل داخل `routeros/deploy.rsc` و`deployment/.env` القيم التالية قبل النشر (يتوقف السكربت تلقائياً إذا بقيت القيم الافتراضية):
+   - `apiPassword`: كلمة مرور قوية (`>= 12` حرفاً) لحساب `rawad-api` متطابقة مع `MIKROTIK_API_PASSWORD` في `deployment/.env`.
+   - `portalDomain`: النطاق الحقيقي للشركة (مثل `wifi.yourcompany.com`).
+   - `backendServerIp`: عنوان الخادم المحلي الثابت في شبكة الإدارة/الموظفين (مثل `192.168.10.10`) متطابقاً مع `GUEST_PROXY_BIND_IP`.
 3. شغّل Backend وGuest Portal وAdmin Dashboard على الخادم المحلي (`MIKROTIK_MODE=rest`).
 
 ## الخطوة 4: تطبيق الإعدادات على MikroTik
