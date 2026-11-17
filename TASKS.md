@@ -1,10 +1,10 @@
-# TASKS.md — Safe Field-Test Package Preparation
+# TASKS.md — Harden Field-Test Isolation Before Approval
 
 **Branch:** `field-test-preparation`  
-**Baseline Commit:** `e6bac87430d1769864ba5e055d01b9ffe0445f17`
+**Baseline Commit:** `9db717cc99130f71e988dc12c1daa825b9a2ffc8`
 
-- [x] **FT1** Add isolated `FIELD_TEST_MODE` & `MIKROTIK_MODE=mock` support (`backend/config/env.ts`, `backend/mikrotik/mockAdapter.ts`, `backend/api/server.ts`) with fail-closed rejection of production Supabase URLs (`*.supabase.co`), real MikroTik hosts, and `NODE_ENV=production`.
-- [x] **FT2** Create `deployment/.env.field-test.example` (test-only placeholders, zero real secrets) and harden `deployment/build-usb-package.ps1` to strip any `.env` or private TLS certificates/keys (`*.key`, `*.pem`, `*.crt`, `*.p12`).
-- [x] **FT3** Add `tests/verify_field_test.mjs` covering API health check, `MockMikroTikAdapter`, 30m free quota & duplicate MAC blocking, Username/Password first-login duration & `bindMac=false`, session expiry/revocation, DB fail-closed, and production-URL isolation.
-- [x] **FT4** Document isolated test procedures, boundaries, and Local Isolated vs MikroTik Lab vs Production Deployment differences in `FIELD_TEST.md`.
-- [x] **FT5** Run Backend/Frontend builds, `tests/verify_field_test.mjs`, USB package build & smoke test, update `PROGRESS.md`, and commit on `field-test-preparation` (no merge to `main`, no deployment).
+- [x] **H1** Enforce loopback-only `HOST` (`127.0.0.1` or `localhost`) and loopback origins in `validateFieldTestIsolation()` (`backend/config/env.ts`).
+- [x] **H2** Enforce `RAWAD_FIELD_TEST_PACKAGE_LOCK=true` in `backend/api/server.ts`, add `field-test-preflight.mjs` + `start-field-test.bat` + `start-windows.bat` in `deployment/build-usb-package.ps1`, and strip production `.env.example` from the field-test USB package.
+- [x] **H3** Reclassify `tests/verify_field_test.mjs` explicitly as an In-Memory Application Test and add reproducible local PostgreSQL 16 + PostgREST stack (`deployment/docker-compose.field-test.yml`, `deployment/field-test-init.sql`, `deployment/nginx/field-test-postgrest.conf`) + `tests/verify_supabase_integration.mjs`.
+- [x] **H4** Add actual outbound network isolation assertions (`net.Socket.prototype.connect`, `http.request`, `https.request`), loopback bind check, and package-lock rejection checks in `tests/verify_field_test.mjs`.
+- [x] **H5** Update `FIELD_TEST.md` & `PROGRESS.md`, run builds, `tests/verify_field_test.mjs`, `docker compose config`, and USB build + fail-safe preflight/smoke tests; commit to `field-test-preparation`.

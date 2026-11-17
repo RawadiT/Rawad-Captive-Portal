@@ -42,6 +42,9 @@ export function validateFieldTestIsolation(cfg: AppConfig): void {
   if (cfg.nodeEnv === 'production') {
     throw new Error('FATAL: FIELD_TEST_MODE=true is forbidden when NODE_ENV=production');
   }
+  if (cfg.host !== '127.0.0.1' && cfg.host !== 'localhost') {
+    throw new Error(`FATAL: FIELD_TEST_MODE requires loopback HOST (127.0.0.1 or localhost), got '${cfg.host}'`);
+  }
   if (cfg.mikrotikMode !== 'mock') {
     throw new Error('FATAL: FIELD_TEST_MODE requires MIKROTIK_MODE=mock (never connect to real MikroTik)');
   }
@@ -60,6 +63,12 @@ export function validateFieldTestIsolation(cfg: AppConfig): void {
     !/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(cfg.guestPortalOrigin)
   ) {
     throw new Error(`FATAL: FIELD_TEST_MODE requires local GUEST_PORTAL_ORIGIN (${cfg.guestPortalOrigin})`);
+  }
+  if (
+    cfg.adminDashboardOrigin &&
+    !/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(cfg.adminDashboardOrigin)
+  ) {
+    throw new Error(`FATAL: FIELD_TEST_MODE requires local ADMIN_DASHBOARD_ORIGIN (${cfg.adminDashboardOrigin})`);
   }
 }
 

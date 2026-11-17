@@ -1,20 +1,17 @@
 /**
- * Isolated Field-Test Verification Suite (Local Isolated Test)
+ * IN-MEMORY APPLICATION TEST (NOT a PostgreSQL Integration Test)
  *
- * Covers:
- *  - API health check in FIELD_TEST_MODE=true (MockMikroTikAdapter)
- *  - Free 30-min session creation & duplicate MAC prevention (409 active / 403 exhausted)
- *  - Username/Password account creation, first-login duration start, bindMac=false
- *  - Session expiry & revocation via SessionMonitor
- *  - Database failure & Fail-Closed startup/runtime behavior
- *  - Production-URL isolation guard (rejects *.supabase.co, real MikroTik IPs, NODE_ENV=production)
- *  - Zero outbound network connections to production/router endpoints
+ * Uses an in-memory simulated DB + MockMikroTikAdapter to verify application/API behavior
+ * and actual network isolation without touching PostgreSQL or MikroTik.
+ * For real PostgreSQL/PostgREST integration tests, see tests/verify_supabase_integration.mjs.
  */
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
+import https from 'node:https';
+import net from 'node:net';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -80,12 +77,43 @@ withEnv(
   () => assert.throws(() => loadConfig(), /forbidden when NODE_ENV=production/)
 );
 
+for (const badHost of ['0.0.0.0', '192.168.10.10', '10.0.0.5', '172.16.0.1', '8.8.8.8', '::']) {
+  withEnv(
+    {
+      NODE_ENV: 'development',
+      FIELD_TEST_MODE: 'true',
+      MIKROTIK_MODE: 'mock',
+      MIKROTIK_HOST: 'mock.local',
+      HOST: badHost,
+      SUPABASE_URL: 'http://127.0.0.1:54321',
+      GUEST_PORTAL_ORIGIN: 'http://127.0.0.1:3000',
+    },
+    () => assert.throws(() => loadConfig(), /requires loopback HOST/, `Expected HOST=${badHost} to be rejected`)
+  );
+}
+
+for (const badMode of ['routeros-rest']) {
+  withEnv(
+    {
+      NODE_ENV: 'development',
+      FIELD_TEST_MODE: 'true',
+      MIKROTIK_MODE: badMode,
+      MIKROTIK_HOST: 'mock.local',
+      HOST: '127.0.0.1',
+      SUPABASE_URL: 'http://127.0.0.1:54321',
+      GUEST_PORTAL_ORIGIN: 'http://127.0.0.1:3000',
+    },
+    () => assert.throws(() => loadConfig(), /requires MIKROTIK_MODE=mock/)
+  );
+}
+
 const fieldCfg = withEnv(
   {
     NODE_ENV: 'development',
     FIELD_TEST_MODE: 'true',
     MIKROTIK_MODE: 'mock',
     MIKROTIK_HOST: 'mock.local',
+    HOST: '127.0.0.1',
     SUPABASE_URL: 'http://127.0.0.1:54321',
     SUPABASE_SERVICE_ROLE_KEY: 'field-test-dummy-key',
     GUEST_PORTAL_ORIGIN: 'http://127.0.0.1:3000',
@@ -95,9 +123,10 @@ const fieldCfg = withEnv(
 );
 assert.equal(fieldCfg.fieldTestMode, true);
 assert.equal(fieldCfg.mikrotikMode, 'mock');
+assert.equal(fieldCfg.host, '127.0.0.1');
 
 // ============================================================================
-// 2. Fail-Closed Startup Test (Backend exits 1 without SUPABASE_URL)
+// 2. Fail-Closed Startup & Field-Test Package Lock Tests
 // ============================================================================
 const failClosedRun = spawnSync(process.execPath, ['backend/dist/api/server.js'], {
   cwd: root,
@@ -105,6 +134,30 @@ const failClosedRun = spawnSync(process.execPath, ['backend/dist/api/server.js']
   encoding: 'utf8',
 });
 assert.equal(failClosedRun.status, 1, 'Backend must fail-closed when SUPABASE_URL is missing');
+
+for (const unsafeEnv of [
+  { FIELD_TEST_MODE: 'false', MIKROTIK_MODE: 'routeros-rest', NODE_ENV: 'development', HOST: '127.0.0.1' },
+  { FIELD_TEST_MODE: 'true', MIKROTIK_MODE: 'routeros-rest', NODE_ENV: 'development', HOST: '127.0.0.1' },
+  { FIELD_TEST_MODE: 'true', MIKROTIK_MODE: 'mock', NODE_ENV: 'production', HOST: '127.0.0.1' },
+  { FIELD_TEST_MODE: 'true', MIKROTIK_MODE: 'mock', NODE_ENV: 'development', HOST: '0.0.0.0' },
+]) {
+  const lockRun = spawnSync(process.execPath, ['backend/dist/api/server.js'], {
+    cwd: root,
+    env: {
+      ...process.env,
+      ...unsafeEnv,
+      RAWAD_FIELD_TEST_PACKAGE_LOCK: 'true',
+      SUPABASE_URL: 'http://127.0.0.1:54321',
+      SUPABASE_SERVICE_ROLE_KEY: 'dummy',
+      TOKEN_SECRET: '0123456789abcdef0123456789abcdef',
+      DEFAULT_ADMIN_PASSWORD: 'FieldTest@2026!Strong',
+      MIKROTIK_API_PASSWORD: 'FieldTest@2026!Strong',
+      GUEST_PORTAL_ORIGIN: 'https://portal.example.com',
+    },
+    encoding: 'utf8',
+  });
+  assert.equal(lockRun.status, 1, `Package lock must refuse startup for ${JSON.stringify(unsafeEnv)}`);
+}
 
 // ============================================================================
 // 3. Isolated In-Memory PostgreSQL-Semantic DB for End-to-End Field-Test API
@@ -371,9 +424,50 @@ const app = createApp({
 });
 
 const server = http.createServer(app);
-await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-const { port } = server.address();
-const baseUrl = `http://127.0.0.1:${port}`;
+await new Promise((resolve) => server.listen(0, fieldCfg.host, resolve));
+const addr = server.address();
+assert.equal(addr.address, '127.0.0.1', 'Field-Test server must bind ONLY to loopback 127.0.0.1');
+const baseUrl = `http://127.0.0.1:${addr.port}`;
+
+// Verify MockMikroTikAdapter creates ZERO outbound network connections
+{
+  const outboundCalls = [];
+  const origConnect = net.Socket.prototype.connect;
+  const origHttpReq = http.request;
+  const origHttpsReq = https.request;
+  net.Socket.prototype.connect = function (...args) {
+    outboundCalls.push({ kind: 'net.connect', args });
+    return origConnect.apply(this, args);
+  };
+  http.request = (...args) => {
+    outboundCalls.push({ kind: 'http.request', args });
+    return origHttpReq(...args);
+  };
+  https.request = (...args) => {
+    outboundCalls.push({ kind: 'https.request', args });
+    return origHttpsReq(...args);
+  };
+  try {
+    await mikrotik.checkConnection();
+    await mikrotik.resolveClientByIp('192.168.20.50');
+    await mikrotik.grantHotspotAccess({
+      username: 'netcheck',
+      password: 'pw',
+      macAddress: 'AA:BB:CC:DD:EE:77',
+      ipAddress: '192.168.20.77',
+      bindMac: true,
+      sessionTimeoutSeconds: 60,
+      profile: 'p',
+    });
+    await mikrotik.listActiveSessions();
+    await mikrotik.revokeHotspotAccess({ username: 'netcheck', macAddress: 'AA:BB:CC:DD:EE:77' });
+    assert.equal(outboundCalls.length, 0, 'MockMikroTikAdapter must make ZERO outbound network calls');
+  } finally {
+    net.Socket.prototype.connect = origConnect;
+    http.request = origHttpReq;
+    https.request = origHttpsReq;
+  }
+}
 
 async function api(pathStr, opts = {}) {
   const res = await fetch(`${baseUrl}${pathStr}`, {
@@ -471,7 +565,7 @@ try {
   // Test 12: Verify routeros scripts were not modified and no .env secrets exist in repo
   assert.equal(fs.existsSync(path.join(root, 'deployment', '.env')), false);
 
-  console.log('ALL FIELD-TEST ISOLATED VERIFICATIONS PASSED');
+  console.log('ALL IN-MEMORY APPLICATION & NETWORK-ISOLATION TESTS PASSED');
 } finally {
   server.closeAllConnections?.();
   server.close();

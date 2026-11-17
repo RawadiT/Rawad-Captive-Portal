@@ -10,6 +10,18 @@ import { createApp } from './app.js';
 
 async function main() {
   const config = loadConfig();
+  if (process.env.RAWAD_FIELD_TEST_PACKAGE_LOCK === 'true') {
+    if (
+      !config.fieldTestMode ||
+      config.mikrotikMode !== 'mock' ||
+      config.nodeEnv !== 'development' ||
+      config.host !== '127.0.0.1'
+    ) {
+      throw new Error(
+        'FATAL: Field-Test package requires FIELD_TEST_MODE=true, MIKROTIK_MODE=mock, NODE_ENV=development, and HOST=127.0.0.1'
+      );
+    }
+  }
   if (!config.supabaseUrl || !config.supabaseServiceRoleKey) {
     throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
   }
