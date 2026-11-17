@@ -39,12 +39,15 @@ Deno.serve(async (req) => {
   }
 
   if (action === 'ack') {
-    const rawIds = (url.searchParams.get('ids') ?? '')
+    const parts = (url.searchParams.get('ids') ?? '')
       .split(',')
       .map((s) => s.trim())
-      .filter((s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s));
-    if (rawIds.length === 0) return text('ACK:0', 200);
-    const { data, error } = await db.rpc('ack_revoked_sessions', { p_session_ids: rawIds });
+      .filter((s) => s.length > 0);
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (parts.length === 0 || parts.some((s) => !uuidRe.test(s))) {
+      return text('ERR:invalid_ids', 400);
+    }
+    const { data, error } = await db.rpc('ack_revoked_sessions', { p_session_ids: parts });
     if (error) return text('ERR:db_error', 500);
     return text(`ACK:${Number(data ?? 0)}`, 200);
   }

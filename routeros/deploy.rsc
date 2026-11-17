@@ -328,25 +328,40 @@
   "        :if ([:typeof \$sep2] = \"num\") do={\n" . \
   "          :local rMac [:pick \$rest 0 \$sep2];\n" . \
   "          :local rIp [:pick \$rest (\$sep2 + 1) [:len \$rest]];\n" . \
-  "          /ip firewall address-list remove [find where list=\"rawad-verified\" && address=\$rIp && comment=\"rawad-guest-portal\"];\n" . \
-  "          /ip hotspot active remove [find where mac-address=\$rMac];\n" . \
-  "          :if (\$ackIds = \"\") do={ :set ackIds \$rId; } else={ :set ackIds (\$ackIds . \",\" . \$rId); }\n" . \
-  "          :set batchCount (\$batchCount + 1);\n" . \
-  "          :if (\$batchCount >= 10) do={\n" . \
+  "          :local validUuid (\$rId ~ \"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\\$\");\n" . \
+  "          :local validMac (\$rMac ~ \"^([0-9A-F]{2}:){5}[0-9A-F]{2}\\$\");\n" . \
+  "          :local validIp (\$rIp ~ \"^[0-9]+\\\\.[0-9]+\\\\.[0-9]+\\\\.[0-9]+\\$\");\n" . \
+  "          :if (\$validUuid && \$validMac && \$validIp) do={\n" . \
+  "            :local cleaned false;\n" . \
   "            :do {\n" . \
-  "              :local ackRes [/tool fetch url=(\"https://\" . \$supaHost . \"/functions/v1/verify-mac?action=ack&ids=\" . \$ackIds) http-header-field=(\"x-router-secret:\" . \$sec) output=user as-value];\n" . \
-  "              :if ((\$ackRes->\"status\") != \"finished\" || [:pick (\$ackRes->\"data\") 0 4] != \"ACK:\") do={}\n" . \
+  "              /ip firewall address-list remove [find where list=\"rawad-verified\" && address=\$rIp && comment=\"rawad-guest-portal\"];\n" . \
+  "              /ip hotspot active remove [find where mac-address=\$rMac];\n" . \
+  "              :set cleaned true;\n" . \
   "            } on-error={}\n" . \
-  "            :set ackIds \"\";\n" . \
-  "            :set batchCount 0;\n" . \
+  "            :if (\$cleaned) do={\n" . \
+  "              :if (\$ackIds = \"\") do={ :set ackIds \$rId; } else={ :set ackIds (\$ackIds . \",\" . \$rId); }\n" . \
+  "              :set batchCount (\$batchCount + 1);\n" . \
+  "              :if (\$batchCount >= 10) do={\n" . \
+  "                :do {\n" . \
+  "                  :local ackRes [/tool fetch url=(\"https://\" . \$supaHost . \"/functions/v1/verify-mac?action=ack&ids=\" . \$ackIds) http-header-field=(\"x-router-secret:\" . \$sec) output=user as-value];\n" . \
+  "                  :local ackData (\$ackRes->\"data\");\n" . \
+  "                  :local ackNum [:tonum [:pick \$ackData 4 [:len \$ackData]]];\n" . \
+  "                  :if ((\$ackRes->\"status\") = \"finished\" && [:pick \$ackData 0 4] = \"ACK:\" && [:typeof \$ackNum] = \"num\" && \$ackNum >= 1 && \$ackNum <= \$batchCount) do={} else={ :put \"WARN: unexpected ACK response\"; }\n" . \
+  "                } on-error={}\n" . \
+  "                :set ackIds \"\";\n" . \
+  "                :set batchCount 0;\n" . \
+  "              }\n" . \
+  "            }\n" . \
   "          }\n" . \
   "        }\n" . \
   "      }\n" . \
   "    }\n" . \
-  "    :if (\$ackIds != \"\") do={\n" . \
+  "    :if (\$ackIds != \"\" && \$batchCount > 0) do={\n" . \
   "      :do {\n" . \
   "        :local ackRes [/tool fetch url=(\"https://\" . \$supaHost . \"/functions/v1/verify-mac?action=ack&ids=\" . \$ackIds) http-header-field=(\"x-router-secret:\" . \$sec) output=user as-value];\n" . \
-  "        :if ((\$ackRes->\"status\") != \"finished\" || [:pick (\$ackRes->\"data\") 0 4] != \"ACK:\") do={}\n" . \
+  "        :local ackData (\$ackRes->\"data\");\n" . \
+  "        :local ackNum [:tonum [:pick \$ackData 4 [:len \$ackData]]];\n" . \
+  "        :if ((\$ackRes->\"status\") = \"finished\" && [:pick \$ackData 0 4] = \"ACK:\" && [:typeof \$ackNum] = \"num\" && \$ackNum >= 1 && \$ackNum <= \$batchCount) do={} else={ :put \"WARN: unexpected final ACK response\"; }\n" . \
   "      } on-error={}\n" . \
   "    }\n" . \
   "  }\n" . \

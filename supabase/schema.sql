@@ -314,7 +314,10 @@ BEGIN
   IF v_sess.session_type = 'user' AND v_sess.user_id IS NOT NULL THEN
     SELECT * INTO v_user FROM public.users u WHERE u.id = v_sess.user_id;
     IF NOT FOUND OR v_user.is_disabled OR v_user.expires_at IS NULL THEN
-      UPDATE public.sessions SET status = 'disconnected' WHERE id = v_sess.id;
+      UPDATE public.sessions s
+      SET status = 'disconnected',
+          revoked_at = COALESCE(s.revoked_at, v_now)
+      WHERE s.id = v_sess.id;
       RETURN QUERY SELECT false, 0, NULL::TEXT;
       RETURN;
     END IF;
@@ -324,7 +327,10 @@ BEGIN
   END IF;
 
   IF v_rem <= 0 THEN
-    UPDATE public.sessions SET status = 'expired' WHERE id = v_sess.id;
+    UPDATE public.sessions s
+    SET status = 'expired',
+        revoked_at = COALESCE(s.revoked_at, v_now)
+    WHERE s.id = v_sess.id;
     RETURN QUERY SELECT false, 0, NULL::TEXT;
     RETURN;
   END IF;

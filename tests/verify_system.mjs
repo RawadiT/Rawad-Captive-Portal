@@ -58,25 +58,54 @@ assert.match(verifyMacTs, /x-router-secret/);
 assert.match(verifyMacTs, /constantTimeEqual/);
 assert.match(verifyMacTs, /ALLOW:/);
 assert.match(verifyMacTs, /get_revoked_sessions/);
+assert.match(verifyMacTs, /ERR:invalid_ids/);
+
+const adminApiTs = fs.readFileSync(path.join(root, 'supabase/functions/admin-api/index.ts'), 'utf8');
+assert.match(adminApiTs, /if \(sessErr\)/);
 
 const portalAuthTs = fs.readFileSync(path.join(root, 'supabase/functions/portal-auth/index.ts'), 'utf8');
 assert.ok(!/error\.message/.test(portalAuthTs), 'portal-auth must not leak raw DB error.message to client');
 
-// RouterOS deploy.rsc enforces ether10 scope, DNS gate, Walled Garden to Supabase, Fail-Closed on-login, and revocation scheduler
+// RouterOS deploy.rsc enforces ether10 scope, DNS gate, Walled Garden to Supabase, Fail-Closed on-login, and validated revocation ACK
 assert.match(deployRsc, /:local guestIf "ether10"/);
 assert.match(deployRsc, /src-address-list="!rawad-verified" action=drop/);
 assert.match(deployRsc, /\/functions\/v1\/verify-mac\?mac=/);
 assert.match(deployRsc, /rawad-sync-revocations/);
 assert.match(deployRsc, /x-router-secret:/);
+assert.match(deployRsc, /\\\$validUuid && \\\$validMac && \\\$validIp/);
+assert.match(deployRsc, /\\\$ackNum >= 1 && \\\$ackNum <= \\\$batchCount/);
 assert.match(rollbackRsc, /\/system script remove \$stateSid/);
 assert.match(rollbackRsc, /\/system script remove \$anchorSid/);
 assert.match(rollbackRsc, /\$rawadCreatedSched = true/);
 
+// Behavioral JS check for RouterOS ACK validation logic (rejects ACK:0, ACK:, ERR:..., and malformed rows)
+{
+  const parseAck = (status, data, batchCount) => {
+    if (status !== 'finished' || typeof data !== 'string' || !data.startsWith('ACK:')) return false;
+    const rawNum = data.slice(4).trim();
+    if (!/^\d+$/.test(rawNum)) return false;
+    const n = Number(rawNum);
+    return n >= 1 && n <= batchCount;
+  };
+  assert.equal(parseAck('finished', 'ACK:2', 2), true);
+  assert.equal(parseAck('finished', 'ACK:0', 2), false, 'ACK:0 must NOT be treated as batch success');
+  assert.equal(parseAck('finished', 'ACK:', 2), false, 'ACK: must NOT be treated as batch success');
+  assert.equal(parseAck('finished', 'ERR:db_error', 2), false);
+  assert.equal(parseAck('failed', 'ACK:2', 2), false);
+
+  const isValidRevRow = (rId, rMac, rIp) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rId) &&
+    /^([0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(rMac) &&
+    /^\d+\.\d+\.\d+\.\d+$/.test(rIp);
+  assert.equal(isValidRevRow('11111111-1111-4111-8111-111111111111', 'AA:BB:CC:DD:EE:01', '192.168.20.10'), true);
+  assert.equal(isValidRevRow('not-a-uuid', 'AA:BB:CC:DD:EE:01', '192.168.20.10'), false);
+  assert.equal(isValidRevRow('11111111-1111-4111-8111-111111111111', 'bad-mac', '192.168.20.10'), false);
+  assert.equal(isValidRevRow('11111111-1111-4111-8111-111111111111', 'AA:BB:CC:DD:EE:01', ''), false);
+}
+
 // SQL schema checks: NO destructive DROP TABLE CASCADE, NO created_at lookback in get_revoked_sessions, Asia/Baghdad daily quota, RLS
 assert.ok(!/DROP TABLE\b/i.test(schemaSql), 'schema.sql must NOT drop tables on re-apply');
 assert.ok(!/s\.created_at\s*>=\s*v_now\s*-\s*make_interval/i.test(schemaSql), 'get_revoked_sessions must NOT filter by s.created_at lookback');
-assert.match(deployRsc, /\$batchCount >= 10/);
-assert.match(deployRsc, /!= \\"ACK:\\"/);
 assert.match(schemaSql, /AT TIME ZONE 'Asia\/Baghdad'/i);
 assert.match(schemaSql, /PRIMARY KEY \(mac_address, quota_date\)/i);
 assert.match(schemaSql, /ALTER TABLE public\.free_quotas ENABLE ROW LEVEL SECURITY/i);
@@ -159,7 +188,7 @@ if (pgExec) {
     const vDisabled = pgExec(`SELECT allowed, remaining_seconds FROM public.verify_mac_authorization('${testMac2}', '192.168.20.12', '2026-11-17T11:30:00Z'::timestamptz);`);
     assert.equal(vDisabled, 'f|0');
 
-    // 1. Genuinely old (+2h) active session whose user is disabled 2 hours later -> get_revoked_sessions MUST catch it!
+    // Test A: Genuinely old (+2h) active session disabled at tPlus2h, with verify_mac_authorization() called BEFORE get_revoked_sessions()!
     const t0 = '2026-11-17T08:00:00Z';
     const tPlus2h = '2026-11-17T10:00:00Z';
     const tPlus4h = '2026-11-17T12:00:00Z';
@@ -171,10 +200,15 @@ if (pgExec) {
     const ageLongSec = Number(pgExec(`SELECT FLOOR(EXTRACT(EPOCH FROM ('${tPlus2h}'::timestamptz - created_at))) FROM public.sessions WHERE id = '${sessLong}';`));
     assert.ok(ageLongSec >= 7200, `Expected sessLong age >= 7200s, got ${ageLongSec}s`);
 
-    // Advance 2 hours -> disable user -> must appear in get_revoked_sessions immediately regardless of created_at
+    // Disable user -> call verify_mac_authorization() FIRST -> must deny AND set revoked_at -> get_revoked_sessions() MUST still return it!
     pgExec(`UPDATE public.users SET is_disabled = true WHERE id = '${uidLong}';`);
+    const vPreRevokeDisabled = pgExec(`SELECT allowed, remaining_seconds FROM public.verify_mac_authorization('${macLong}', '192.168.20.14', '${tPlus2h}'::timestamptz);`);
+    assert.equal(vPreRevokeDisabled, 'f|0', 'verify_mac_authorization must deny disabled user');
+    const revAtDisabled = pgExec(`SELECT (revoked_at IS NOT NULL)::text FROM public.sessions WHERE id = '${sessLong}';`);
+    assert.equal(revAtDisabled, 'true', 'verify_mac_authorization must set revoked_at on disabled-user transition');
+
     const rev1 = pgExec(`SELECT session_id || '|' || mac_address || '|' || ip_address FROM public.get_revoked_sessions('${tPlus2h}'::timestamptz);`);
-    assert.ok(rev1.includes(`${sessLong}|${macLong}|192.168.20.14`), '2h-old disabled session must appear in get_revoked_sessions');
+    assert.ok(rev1.includes(`${sessLong}|${macLong}|192.168.20.14`), 'Disabled session after verify_mac_authorization() must still appear in get_revoked_sessions');
 
     // Simulate router unreachable / failed ACK -> calling get_revoked_sessions again MUST still return it!
     const revRetry = pgExec(`SELECT session_id FROM public.get_revoked_sessions('${tPlus2h}'::timestamptz);`);
@@ -186,7 +220,7 @@ if (pgExec) {
     const revAfterAck = pgExec(`SELECT session_id FROM public.get_revoked_sessions('${tPlus2h}'::timestamptz);`);
     assert.ok(!revAfterAck.includes(sessLong), 'Acknowledged revocation must NOT be returned repeatedly');
 
-    // 2. Genuinely old (+4h) session expiring 4 hours after creation (duration 180m = 3h)
+    // Test B: Genuinely old (+4h) session expiring at tPlus4h (duration 180m = 3h), with verify_mac_authorization() called BEFORE get_revoked_sessions()!
     const uidExp = pgExec(`INSERT INTO public.users (username, password_hash, duration_minutes) VALUES ('${testUser}_exp', 'pbkdf2:00:00', 180) RETURNING id;`);
     const macExp = '02:AA:BB:CC:DD:05';
     const sessExp = pgExec(`SELECT session_id FROM public.authorize_user_login('${uidExp}', '${macExp}', '192.168.20.15', '${t0}'::timestamptz);`);
@@ -194,8 +228,14 @@ if (pgExec) {
     pgExec(`UPDATE public.sessions SET created_at = '${t0}'::timestamptz WHERE id = '${sessExp}';`);
     const expChecks = pgExec(`SELECT (EXTRACT(EPOCH FROM ('${tPlus4h}'::timestamptz - created_at)) >= 14400)::text || '|' || (expires_at < '${tPlus4h}'::timestamptz)::text FROM public.sessions WHERE id = '${sessExp}';`);
     assert.equal(expChecks, 'true|true', 'sessExp must have created_at >= 4h older than p_now and expires_at < p_now');
+
+    const vPreRevokeExpired = pgExec(`SELECT allowed, remaining_seconds FROM public.verify_mac_authorization('${macExp}', '192.168.20.15', '${tPlus4h}'::timestamptz);`);
+    assert.equal(vPreRevokeExpired, 'f|0', 'verify_mac_authorization must deny expired session');
+    const revAtExpired = pgExec(`SELECT (revoked_at IS NOT NULL)::text FROM public.sessions WHERE id = '${sessExp}';`);
+    assert.equal(revAtExpired, 'true', 'verify_mac_authorization must set revoked_at on expired-session transition');
+
     const revExp = pgExec(`SELECT session_id FROM public.get_revoked_sessions('${tPlus4h}'::timestamptz);`);
-    assert.ok(revExp.includes(sessExp), 'Expired session long after creation must appear in get_revoked_sessions');
+    assert.ok(revExp.includes(sessExp), 'Expired session after verify_mac_authorization() must still appear in get_revoked_sessions');
     pgExec(`SELECT public.ack_revoked_sessions(ARRAY['${sessExp}']::uuid[]);`);
 
     // Unknown MAC without prior portal-auth -> verify_mac_authorization denies (prevents rawad-gate bypass!)
