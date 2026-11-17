@@ -231,7 +231,7 @@
   "/ip firewall address-list remove [find where list=\"rawad-verified\" && address=\$ipStr && comment=\"rawad-guest-portal\"];\n" . \
   ":do {\n" . \
   "  :local res [/tool fetch url=(\"https://\" . \$supaHost . \"/functions/v1/verify-mac?mac=\" . \$macStr . \"&ip=\" . \$ipStr) http-header-field=(\"x-router-secret:\" . \$sec) output=user as-value];\n" . \
-  "  :local httpOk ([:typeof (\$res->\"code\")] = \"nothing\" || [:tonum (\$res->\"code\")] = 200);\n" . \
+  "  :local httpOk ([:typeof [:tonum (\$res->\"code\")]] = \"num\" && [:tonum (\$res->\"code\")] = 200);\n" . \
   "  :if ((\$res->\"status\") = \"finished\" && \$httpOk) do={\n" . \
   "    :local body (\$res->\"data\");\n" . \
   "    :if ([:pick \$body 0 6] = \"ALLOW:\") do={\n" . \
@@ -314,7 +314,7 @@
   ":local sec \"" . $routerSecret . "\";\n" . \
   ":do {\n" . \
   "  :local res [/tool fetch url=(\"https://\" . \$supaHost . \"/functions/v1/verify-mac?action=revoked\") http-header-field=(\"x-router-secret:\" . \$sec) output=user as-value];\n" . \
-  "  :local feedHttpOk ([:typeof (\$res->\"code\")] = \"nothing\" || [:tonum (\$res->\"code\")] = 200);\n" . \
+  "  :local feedHttpOk ([:typeof [:tonum (\$res->\"code\")]] = \"num\" && [:tonum (\$res->\"code\")] = 200);\n" . \
   "  :if ((\$res->\"status\") = \"finished\" && \$feedHttpOk) do={\n" . \
   "    :local body (\$res->\"data\");\n" . \
   "    :local ackIds \"\";\n" . \
@@ -349,7 +349,7 @@
   "              :if (\$batchCount >= 10) do={\n" . \
   "                :do {\n" . \
   "                  :local ackRes [/tool fetch url=(\"https://\" . \$supaHost . \"/functions/v1/verify-mac?action=ack&ids=\" . \$ackIds) http-header-field=(\"x-router-secret:\" . \$sec) output=user as-value];\n" . \
-  "                  :local ackHttpOk ([:typeof (\$ackRes->\"code\")] = \"nothing\" || [:tonum (\$ackRes->\"code\")] = 200);\n" . \
+  "                  :local ackHttpOk ([:typeof [:tonum (\$ackRes->\"code\")]] = \"num\" && [:tonum (\$ackRes->\"code\")] = 200);\n" . \
   "                  :local ackData (\$ackRes->\"data\");\n" . \
   "                  :local ackRaw [:pick \$ackData 4 [:len \$ackData]];\n" . \
   "                  :local ackNum [:tonum \$ackRaw];\n" . \
@@ -366,7 +366,7 @@
   "    :if (\$ackIds != \"\" && \$batchCount > 0) do={\n" . \
   "      :do {\n" . \
   "        :local ackRes [/tool fetch url=(\"https://\" . \$supaHost . \"/functions/v1/verify-mac?action=ack&ids=\" . \$ackIds) http-header-field=(\"x-router-secret:\" . \$sec) output=user as-value];\n" . \
-  "        :local ackHttpOk ([:typeof (\$ackRes->\"code\")] = \"nothing\" || [:tonum (\$ackRes->\"code\")] = 200);\n" . \
+  "        :local ackHttpOk ([:typeof [:tonum (\$ackRes->\"code\")]] = \"num\" && [:tonum (\$ackRes->\"code\")] = 200);\n" . \
   "        :local ackData (\$ackRes->\"data\");\n" . \
   "        :local ackRaw [:pick \$ackData 4 [:len \$ackData]];\n" . \
   "        :local ackNum [:tonum \$ackRaw];\n" . \

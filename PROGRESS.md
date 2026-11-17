@@ -1,11 +1,11 @@
 # PROGRESS.md — Rawad Captive Portal
 
 **Branch:** `field-test-preparation`  
-**Status:** Final RouterOS ACK Scope & HTTP Status Hardening Complete; Verified in GitHub Actions PG 16
+**Status:** Strict HTTP 200 Fetch Validation Complete; Verified in GitHub Actions PG 16
 
 ## Changes Completed
-- **`routeros/deploy.rsc`:** Scoped all HotSpot active removals to `server="rawad-guest-hotspot" && mac-address=... && address=...`; enforced HTTP `code = 200` (when present), `status = "finished"`, digits-only `ACK:<n>`, and `1 <= n <= batchCount` across feed and full/partial ACK batches.
-- **`tests/verify_system.mjs`:** Added behavioral tests for HTTP 401/500/429, `status=failed`, `ACK:0`, empty/malformed/out-of-range counts, and HotSpot/address-list scoping.
+- **`routeros/deploy.rsc`:** Replaced `[:typeof (...->"code")] = "nothing" || ...` with strict `[:typeof [:tonum (...->"code")]] = "num" && [:tonum (...->"code")] = 200` on all 4 `/tool fetch` paths.
+- **`tests/verify_system.mjs`:** Updated `parseAck()` to reject missing `code`, `code: null`, non-200 HTTP codes, `status != 'finished'`, and malformed/out-of-range ACK counts, and verified all 4 fetch paths in `deploy.rsc`.
 
 ## Not Tested Locally
 - Live MikroTik RB4011 (`ether10`) & Live Supabase Deno Edge Function deployment (`NOT PERFORMED`).

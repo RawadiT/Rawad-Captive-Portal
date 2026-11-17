@@ -81,18 +81,30 @@ assert.match(rollbackRsc, /\/system script remove \$stateSid/);
 assert.match(rollbackRsc, /\/system script remove \$anchorSid/);
 assert.match(rollbackRsc, /\$rawadCreatedSched = true/);
 
-// Behavioral JS check for RouterOS ACK validation logic (HTTP status + numeric range + malformed rows)
+assert.ok(!deployRsc.includes('= \\"nothing\\"'), 'RouterOS HTTP checks must NOT accept missing code');
+assert.equal(
+  (deployRsc.match(/\[:typeof \[:tonum \(\\\$(?:res|ackRes)->\\"code\\"\)\]\] = \\"num\\" && \[:tonum \(\\\$(?:res|ackRes)->\\"code\\"\)\] = 200/g) || []).length,
+  4,
+  'All 4 fetch paths (on-login, feed, full ACK batch, partial ACK batch) must strictly require numeric HTTP 200'
+);
+
+// Behavioral JS check for RouterOS ACK validation logic (strict HTTP 200 + numeric range + malformed rows)
 {
   const parseAck = (res, batchCount) => {
     if (!res || res.status !== 'finished') return false;
-    if (res.code !== undefined && Number(res.code) !== 200) return false;
+    if (res.code === undefined || res.code === null || typeof res.code === 'boolean') return false;
+    const httpCode = Number(res.code);
+    if (!Number.isFinite(httpCode) || httpCode !== 200) return false;
     if (typeof res.data !== 'string' || !res.data.startsWith('ACK:')) return false;
     const rawNum = res.data.slice(4);
     if (!/^[0-9]+$/.test(rawNum)) return false;
     const n = Number(rawNum);
     return n >= 1 && n <= batchCount;
   };
+  assert.equal(parseAck({ status: 'finished', code: 200, data: 'ACK:1' }, 1), true);
   assert.equal(parseAck({ status: 'finished', code: 200, data: 'ACK:2' }, 2), true);
+  assert.equal(parseAck({ status: 'finished', data: 'ACK:1' }, 2), false, 'Missing code must be rejected');
+  assert.equal(parseAck({ status: 'finished', code: null, data: 'ACK:1' }, 2), false, 'code: null must be rejected');
   assert.equal(parseAck({ status: 'finished', code: 401, data: 'ACK:1' }, 2), false, 'HTTP 401 must be rejected even with ACK:1 body');
   assert.equal(parseAck({ status: 'finished', code: 500, data: 'ACK:1' }, 2), false, 'HTTP 500 must be rejected even with ACK:1 body');
   assert.equal(parseAck({ status: 'finished', code: 429, data: 'ACK:1' }, 2), false, 'HTTP 429 must be rejected');
