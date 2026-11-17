@@ -538,7 +538,7 @@ BEGIN
 END;
 $$;
 
--- Atomically update session status ONLY if the caller still owns the valid monitor lock & fence_token
+-- Atomically update session status ONLY if the caller holds the row-locked monitor lock & fence_token
 CREATE OR REPLACE FUNCTION public.fenced_update_session_status(
   p_session_id UUID,
   p_status TEXT,
@@ -553,18 +553,26 @@ SET search_path = pg_catalog, public
 AS $$
 DECLARE
   v_now TIMESTAMPTZ := clock_timestamp();
+  v_lock public.monitor_locks%ROWTYPE;
 BEGIN
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'Session ID is required';
   END IF;
+  IF p_status IS NULL OR p_status NOT IN ('provisioning', 'active', 'expired', 'disconnected', 'revocation_pending') THEN
+    RAISE EXCEPTION 'Invalid session status: %', COALESCE(p_status, '<null>');
+  END IF;
 
-  IF NOT EXISTS (
-    SELECT 1 FROM public.monitor_locks ml
-    WHERE ml.lock_name = TRIM(COALESCE(p_lock_name, ''))
-      AND ml.owner_id = TRIM(COALESCE(p_owner_id, ''))
-      AND ml.fence_token = p_fence_token
-      AND ml.lease_expires_at >= v_now
-  ) THEN
+  -- Lock the monitor_locks row for the duration of this transaction so no other backend
+  -- can acquire/steal the lock between ownership verification and the session update.
+  SELECT * INTO v_lock
+  FROM public.monitor_locks ml
+  WHERE ml.lock_name = TRIM(COALESCE(p_lock_name, ''))
+  FOR UPDATE;
+
+  IF NOT FOUND
+     OR v_lock.owner_id <> TRIM(COALESCE(p_owner_id, ''))
+     OR v_lock.fence_token <> p_fence_token
+     OR v_lock.lease_expires_at < v_now THEN
     RETURN false;
   END IF;
 
@@ -572,7 +580,7 @@ BEGIN
   SET status = p_status
   WHERE id = p_session_id;
 
-  RETURN true;
+  RETURN FOUND;
 END;
 $$;
 

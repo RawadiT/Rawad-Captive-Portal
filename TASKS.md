@@ -1,9 +1,7 @@
-# TASKS.md — Seventh Audit Remediation
+# TASKS.md — Final Focused Audit (PostgreSQL Fencing Race)
 
-**Baseline Commit:** `0883ebfafee1051b92ea334bc36486efa7ed35f7`
+**Baseline Commit:** `6850f913db7f45a7b82d15cc5c6cf32c32398411`
 
-- [x] **A7.1** Verify `rawad-portal-state` exact `.id`, name, comment, safe `:global` grammar, and dual-hash digest (`rawadStateH1`, `rawadStateH2`) against `rawad-portal-anchor` in `routeros/rollback.rsc` BEFORE executing `/system script run`.
-- [x] **A7.2** Add monotonic `fence_token` to `monitor_locks`, `try_acquire_monitor_lock`, and `fenced_update_session_status` RPC in `supabase/schema.sql`, `backend/db/*`, and `SessionMonitor` to prevent stale mutations on lock loss during in-flight MikroTik or PostgreSQL calls.
-- [x] **A7.3** Harden `SessionMonitor` lock renewal lifecycle (`renewalSeq`, `lockStopped`, `await inFlightLockRenewal`, `!lockLost` release guard) against in-flight renewal races.
-- [x] **A7.4** Allow `mark_revocation_pending` to re-queue from `'disconnected'` on late MikroTik grant compensation failure so no late grant can remain un-revoked.
-- [x] **A7.5** Run Fifth, Sixth, and Seventh Audit regression suites, Backend & Frontend builds, SQL/RouterOS static checks, USB package build & smoke test, update `PROGRESS.md`, commit & push to `main`.
+- [x] **F1** Make `public.fenced_update_session_status()` in `supabase/schema.sql` lock the `monitor_locks` row with `SELECT ... FOR UPDATE`, validate `p_status`, and return `FOUND` (`false` if no session row was updated).
+- [x] **F2** Add concurrency test (`verify_fencing_race.mjs`) proving `FOR UPDATE` blocks Backend B until Backend A's transaction completes, rejects stale `fence_token` from A after B takes ownership, rejects expired locks, and rejects invalid `p_status` / missing session.
+- [x] **F3** Re-run Fifth, Sixth, and Seventh Audit suites, Backend & Frontend builds, SQL & RouterOS static checks, USB build & smoke test, update `PROGRESS.md`, commit & push to `main`.

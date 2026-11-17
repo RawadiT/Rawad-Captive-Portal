@@ -1,10 +1,8 @@
-# PROGRESS.md — Seventh Audit Remediation
+# PROGRESS.md — Final Focused Audit (PostgreSQL Fencing Race)
 
-**Baseline Commit:** `0883ebfafee1051b92ea334bc36486efa7ed35f7`  
+**Baseline Commit:** `6850f913db7f45a7b82d15cc5c6cf32c32398411`  
 **Status:** Complete Locally (Live Supabase & MikroTik Tests NOT RUN — Not Deployed)
 
-- **A7.1:** Updated `routeros/deploy.rsc` and `routeros/rollback.rsc` so `rollback.rsc` reads `rawad-portal-anchor` and `rawad-portal-state` as strings and verifies `.id`, length, safe grammar, and dual 31-bit polynomial hashes (`rawadStateH1`/`rawadStateH2`) BEFORE running `/system script run`.
-- **A7.2:** Added `fence_token` to `public.monitor_locks` and `fenced_update_session_status()` in `supabase/schema.sql`, wired through `DatabaseClient` / `SupabaseDatabaseClient` and `SessionMonitor` (`verifyLock()` + fenced status writes).
-- **A7.3:** Hardened `SessionMonitor` lock renewal with `renewalSeq` and `lockStopped` guards so late/failed renewals never schedule timers or release another process's lock.
-- **A7.4:** Extended `mark_revocation_pending` to allow re-queuing from `'disconnected'` if late MikroTik compensation fails after `SessionMonitor` already ran.
-- **A7.5:** Executed Backend `tsc`, Frontend `tsc --noEmit` & `next build`, Fifth/Sixth/Seventh Audit test suites, and `build-usb-package.ps1` + USB smoke test.
+- **F1:** Hardened `public.fenced_update_session_status()` in `supabase/schema.sql` with `SELECT * INTO v_lock FROM public.monitor_locks ml ... FOR UPDATE`, `p_status` allowlist validation, and `RETURN FOUND`.
+- **F2:** Verified transactional fencing race (`verify_fencing_race.mjs`) covering in-flight `FOR UPDATE` blocking, post-takeover stale `fence_token` rejection, expired lock rejection, invalid status rejection, and `RETURN FOUND` on missing session.
+- **F3:** Re-ran Fifth, Sixth, and Seventh Audit suites, Backend `tsc`, Frontend `tsc --noEmit` & `next build`, and `build-usb-package.ps1` + USB smoke test.
