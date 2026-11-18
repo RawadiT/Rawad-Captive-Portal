@@ -57,16 +57,17 @@ Deno.serve(async (req) => {
     const username = String(body?.username || '').trim();
     const password = String(body?.password || '');
     const { data: admin } = await db.from('admins')
-      .select('id, username, password_hash, is_super_admin')
+      .select('id, username, password_hash, is_super_admin, role')
       .eq('username', username).maybeSingle();
     if (!admin || !(await verifyPassword(password, admin.password_hash))) {
       return json({ error: 'بيانات الدخول غير صحيحة' }, 401);
     }
     const token = await signAdminToken({
-      sub: admin.id, username: admin.username, is_super_admin: admin.is_super_admin === true,
+      sub: admin.id, username: admin.username, is_super_admin: admin.is_super_admin === true, role: admin.role || (admin.is_super_admin ? 'site_owner' : 'subordinate'),
     }, tokenSecret);
     return json({ token, admin: {
       id: admin.id, username: admin.username, is_super_admin: admin.is_super_admin === true,
+      role: admin.role || (admin.is_super_admin ? 'site_owner' : 'subordinate'),
     } });
   }
 
@@ -78,13 +79,15 @@ Deno.serve(async (req) => {
   // Re-read the administrator on every request. Role changes and account removal
   // take effect immediately; token claims alone are never trusted for privileges.
   const { data: actor, error: actorError } = await db.from('admins')
-    .select('id, username, password_hash, is_super_admin')
+    .select('id, username, password_hash, is_super_admin, role')
     .eq('id', payload.sub).maybeSingle();
   if (actorError || !actor) return json({ error: 'حساب الإدارة غير موجود أو غير مفعل' }, 401);
-  const isRoot = actor.is_super_admin === true;
+  const isRoot = actor.is_super_admin === true || actor.role === 'site_owner';
+  const role = isRoot ? 'site_owner' : (actor.role === 'general' ? 'general' : 'subordinate');
+  const canManageOperations = role === 'site_owner' || role === 'general';
 
   if (req.method === 'GET' && subPath === '/me') {
-    return json({ admin: { id: actor.id, username: actor.username, is_super_admin: isRoot } });
+    return json({ admin: { id: actor.id, username: actor.username, is_super_admin: isRoot, role } });
   }
 
   if (req.method === 'POST' && subPath === '/change-password') {
@@ -108,7 +111,7 @@ Deno.serve(async (req) => {
     if (!isRoot) return json({ error: 'هذه العملية متاحة للمدير الأساسي فقط' }, 403);
     if (req.method === 'GET') {
       const { data, error } = await db.from('admins')
-        .select('id, username, is_super_admin, created_at')
+        .select('id, username, is_super_admin, role, created_at')
         .order('created_at', { ascending: true });
       if (error) return json({ error: error.message }, 500);
       return json({ admins: data ?? [] });
@@ -117,12 +120,13 @@ Deno.serve(async (req) => {
       const body = await req.json().catch(() => ({}));
       const username = String(body?.username || '').trim();
       const password = body?.password;
-      if (!username || username.length > 64 || !validPassword(password)) {
+      const requestedRole = body?.role;
+      if (!username || username.length > 64 || !validPassword(password) || !['general', 'subordinate'].includes(requestedRole)) {
         return json({ error: 'اسم المستخدم مطلوب وكلمة المرور 6 أحرف على الأقل' }, 400);
       }
       const { data, error } = await db.from('admins')
-        .insert({ username, password_hash: await hashPassword(password), is_super_admin: false })
-        .select('id, username, is_super_admin, created_at').single();
+        .insert({ username, password_hash: await hashPassword(password), is_super_admin: false, role: requestedRole })
+        .select('id, username, is_super_admin, role, created_at').single();
       if (error) return json({ error: error.message }, 409);
       return json({ admin: data }, 201);
     }
@@ -132,13 +136,13 @@ Deno.serve(async (req) => {
   if (adminMatch && (req.method === 'PATCH' || req.method === 'DELETE')) {
     if (!isRoot) return json({ error: 'هذه العملية متاحة للمدير الأساسي فقط' }, 403);
     const targetId = adminMatch[1];
-    if (targetId === actor.id) {
+    if (targetId === actor.id || targetId === '39c0a9e8-028d-4c04-a0e3-e46e21cef7d9') {
       return json({ error: 'لا يمكن حذف حساب المدير الأساسي أو تعديله من هذه الواجهة؛ استخدم تغيير كلمة المرور أو بيانات الحساب الخاصة به' }, 403);
     }
     const { data: target } = await db.from('admins')
-      .select('id, is_super_admin').eq('id', targetId).maybeSingle();
+      .select('id, is_super_admin, role').eq('id', targetId).maybeSingle();
     if (!target) return json({ error: 'حساب المدير غير موجود' }, 404);
-    if (target.is_super_admin) return json({ error: 'لا يمكن حذف أو تعديل صلاحيات المدير الأساسي' }, 403);
+    if (target.is_super_admin || target.role === 'site_owner') return json({ error: 'لا يمكن حذف أو تعديل حساب مدير الموقع' }, 403);
     if (req.method === 'DELETE') {
       const { error } = await db.from('admins').delete().eq('id', targetId);
       if (error) return json({ error: error.message }, 400);
@@ -147,19 +151,22 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const updates: Record<string, unknown> = {};
     if (typeof body?.username === 'string' && body.username.trim()) updates.username = body.username.trim();
+    if (body?.role !== undefined) {
+      if (!['general', 'subordinate'].includes(body.role)) return json({ error: 'نوع صلاحية المدير غير صالح' }, 400);
+      updates.role = body.role;
+    }
     if (body?.password !== undefined && body.password !== '') {
       if (!validPassword(body.password)) return json({ error: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' }, 400);
       updates.password_hash = await hashPassword(body.password);
     }
     if (!Object.keys(updates).length) return json({ error: 'لا توجد بيانات لتعديلها' }, 400);
     const { data, error } = await db.from('admins').update(updates)
-      .eq('id', targetId).select('id, username, is_super_admin, created_at').single();
+      .eq('id', targetId).select('id, username, is_super_admin, role, created_at').single();
     if (error) return json({ error: error.message }, 400);
     return json({ admin: data });
   }
 
   if (req.method === 'GET' && subPath === '/users') {
-    if (!isRoot) return json({ error: 'عرض الحسابات متاح للمدير الأساسي فقط' }, 403);
     const { data, error } = await db.from('users').select('*').order('created_at', { ascending: false });
     if (error) return json({ error: error.message }, 500);
     return json({ users: (data ?? []).map(toPublicUser) });
@@ -182,7 +189,6 @@ Deno.serve(async (req) => {
 
   const userMatch = subPath.match(/^\/users\/([0-9a-f-]{36})$/i);
   if (userMatch && req.method === 'DELETE') {
-    if (!isRoot) return json({ error: 'حذف حسابات الإنترنت متاح للمدير الأساسي فقط' }, 403);
     const userId = userMatch[1];
     const { error: disconnectError } = await db.from('sessions')
       .update({ status: 'disconnected', revoked_at: new Date().toISOString() })
@@ -195,7 +201,7 @@ Deno.serve(async (req) => {
 
   const editMatch = subPath.match(/^\/users\/([0-9a-f-]{36})$/i);
   if (req.method === 'PATCH' && editMatch) {
-    if (!isRoot) return json({ error: 'تعديل حسابات الإنترنت متاح للمدير الأساسي فقط' }, 403);
+    if (!canManageOperations) return json({ error: 'تعديل بيانات الحسابات متاح للمدير العام ومدير الموقع فقط' }, 403);
     const userId = editMatch[1];
     const body = await req.json().catch(() => ({}));
     const updates: Record<string, unknown> = {};
@@ -218,7 +224,6 @@ Deno.serve(async (req) => {
 
   const statusMatch = subPath.match(/^\/users\/([0-9a-f-]{36})\/status$/i);
   if (req.method === 'PATCH' && statusMatch) {
-    if (!isRoot) return json({ error: 'تغيير حالة حسابات الإنترنت متاح للمدير الأساسي فقط' }, 403);
     const userId = statusMatch[1];
     const body = await req.json().catch(() => ({}));
     const isDisabled = Boolean(body?.is_disabled);
@@ -236,7 +241,7 @@ Deno.serve(async (req) => {
   }
 
   if (req.method === 'GET' && subPath === '/free-quotas') {
-    if (!isRoot) return json({ error: 'عرض الحصص المجانية متاح للمدير الأساسي فقط' }, 403);
+    if (!canManageOperations) return json({ error: 'عرض الحصص متاح للمدير العام ومدير الموقع فقط' }, 403);
     const { data, error } = await db.from('free_quotas').select('*')
       .order('created_at', { ascending: false }).limit(200);
     if (error) return json({ error: error.message }, 500);
