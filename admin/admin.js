@@ -23,6 +23,8 @@
   }
   function hideMsg(target) { target.classList.add('hidden'); }
   function getToken() { return sessionStorage.getItem(TOKEN_KEY) || ''; }
+  function isSiteOwner() { return !!currentAdmin && (currentAdmin.role === 'site_owner' || currentAdmin.is_super_admin === true); }
+  function canManageOperations() { return !!currentAdmin && (isSiteOwner() || currentAdmin.role === 'general'); }
 
   async function api(path, opts) {
     if (!cfg.supabaseUrl || !cfg.supabaseAnonKey ||
@@ -96,9 +98,10 @@
         '</small></td><td>' + Number(u.duration_minutes).toLocaleString('ar-IQ') + ' د</td><td>' +
         duration(u.remaining_seconds) + '</td><td>' + badge(u) + '</td><td>' + dateTime(u.started_at) +
         '</td><td>' + dateTime(u.expires_at) + '</td><td><div class="row-actions">' +
-        '<button class="mini-btn edit-btn" data-edit="' + u.id + '">تعديل</button>' +
+        (canManageOperations() ? '<button class="mini-btn edit-btn" data-edit="' + u.id + '">تعديل</button>' : '') +
         '<button class="mini-btn ' + (u.is_disabled ? 'enable-btn' : 'disable-btn') + '" data-toggle="' + u.id +
-        '" data-disabled="' + (!u.is_disabled) + '">' + action + '</button></div></td></tr>';
+        '" data-disabled="' + (!u.is_disabled) + '">' + action + '</button>' +
+        '<button class="mini-btn delete-btn" data-delete-user="' + u.id + '">حذف نهائي</button></div></td></tr>';
     }).join('');
     byId('users-empty').classList.toggle('hidden', filtered.length !== 0);
     if (!filtered.length) byId('users-tbody').innerHTML = '';
@@ -111,7 +114,7 @@
     }).join('') : '<tr><td colspan="5" class="empty">لا توجد سجلات حصص مجانية حالياً.</td></tr>';
   }
   async function loadUsers() {
-    if (!currentAdmin || !currentAdmin.is_super_admin) return;
+    if (!currentAdmin) return;
     var result = await api('/users', { method: 'GET' });
     users = result.users || [];
     renderStats(); renderRecent(); renderUsers();
@@ -121,7 +124,7 @@
     admins = result.admins || [];
     byId('admins-count').textContent = admins.length.toLocaleString('ar-IQ');
     byId('admins-tbody').innerHTML = admins.filter(function (a) { return !a.is_super_admin; }).map(function (a) {
-      return '<tr><td><strong>' + escapeHtml(a.username) + '</strong></td><td><span class="status status-pending">مدير فرعي</span></td><td>' +
+      return '<tr><td><strong>' + escapeHtml(a.username) + '</strong></td><td><span class="status ' + (a.role === 'general' ? 'status-active' : 'status-pending') + '">' + (a.role === 'general' ? 'مدير عام' : 'مدير فرعي') + '</span></td><td>' +
         dateTime(a.created_at) + '</td><td><div class="row-actions"><button class="mini-btn edit-btn" data-edit-admin="' + a.id + '">تعديل</button>' +
         '<button class="mini-btn delete-btn" data-delete-admin="' + a.id + '">حذف</button></div></td></tr>';
     }).join('') || '<tr><td colspan="4" class="empty">لا توجد حسابات مدراء فرعيين.</td></tr>';
@@ -148,7 +151,7 @@
       button.classList.toggle('active', button.dataset.view === name);
     });
     var labels = { overview: 'نظرة عامة', users: 'حسابات الإنترنت', quotas: 'الحصص المجانية', admins: 'إدارة المدراء', password: 'كلمة المرور' };
-    if ((name === 'admins' || name === 'quotas' || name === 'overview') && !currentAdmin.is_super_admin) {
+    if ((name === 'admins' && !isSiteOwner()) || ((name === 'quotas' || name === 'overview') && !canManageOperations())) {
       showView('users');
       return;
     }
@@ -156,23 +159,22 @@
     byId('breadcrumb').textContent = labels[name];
     if (name === 'quotas') loadQuotas().catch(function (e) { showMsg(msgBox, e.message, true); });
     if (name === 'admins') loadAdmins().catch(function (e) { showMsg(msgBox, e.message, true); });
-    if (name === 'users' && currentAdmin.is_super_admin) renderUsers();
+    if (name === 'users') renderUsers();
   }
   function showApp(loggedIn) {
     byId('login-section').classList.toggle('hidden', loggedIn);
     byId('app-shell').classList.toggle('hidden', !loggedIn);
     if (loggedIn) {
       byId('admin-name').textContent = currentAdmin && currentAdmin.username || 'المدير';
-      document.querySelectorAll('[data-root-only]').forEach(function (el) {
-        el.classList.toggle('hidden', !currentAdmin || !currentAdmin.is_super_admin);
+      document.querySelectorAll('[data-owner-only]').forEach(function (el) {
+        el.classList.toggle('hidden', !isSiteOwner());
       });
-      if (currentAdmin && currentAdmin.is_super_admin) {
-        byId('view-users').querySelector('.panel:not(.create-panel)').classList.remove('hidden');
-        loadUsers().catch(function (e) { showMsg(msgBox, e.message, true); });
-      } else {
-        showView('users');
-        byId('view-users').querySelector('.panel:not(.create-panel)').classList.add('hidden');
-      }
+      document.querySelectorAll('[data-manager-only]').forEach(function (el) {
+        el.classList.toggle('hidden', !canManageOperations());
+      });
+      byId('view-users').querySelector('.panel:not(.create-panel)').classList.remove('hidden');
+      loadUsers().catch(function (e) { showMsg(msgBox, e.message, true); });
+      if (!canManageOperations()) showView('users');
     }
   }
 
@@ -289,7 +291,7 @@
 
   byId('users-tbody').addEventListener('click', async function (event) {
     if (event.target.dataset.deleteUser) {
-      if (!currentAdmin || !currentAdmin.is_super_admin) return;
+      if (!currentAdmin) return;
       var targetUser = users.find(function (u) { return u.id === event.target.dataset.deleteUser; });
       if (!targetUser) return;
       askConfirm('حذف حساب الإنترنت', 'سيتم حذف الحساب "' + targetUser.username + '" نهائياً من قاعدة البيانات. لا يمكن التراجع عن هذه العملية.', async function () {
@@ -357,10 +359,11 @@
     try {
       await api('/admins', { method: 'POST', body: JSON.stringify({
         username: byId('new-admin-username').value.trim(),
-        password: byId('new-admin-password').value
+        password: byId('new-admin-password').value,
+        role: byId('new-admin-role').value
       }) });
       form.reset();
-      showMsg(msgBox, 'تم إنشاء حساب المدير الفرعي بنجاح.', false);
+      showMsg(msgBox, 'تم إنشاء حساب المدير بنجاح.', false);
       await loadAdmins();
     } catch (error) { showMsg(msgBox, error.message, true); }
     finally { button.disabled = false; }
@@ -370,6 +373,7 @@
     byId('admin-edit-id').value = admin.id;
     byId('admin-edit-username').value = admin.username;
     byId('admin-edit-password').value = '';
+    byId('admin-edit-role').value = admin.role || 'subordinate';
     hideMsg(byId('admin-edit-msg'));
     byId('admin-edit-modal').classList.remove('hidden');
   }
@@ -384,7 +388,7 @@
     var button = byId('admin-edit-save');
     var id = byId('admin-edit-id').value;
     var password = byId('admin-edit-password').value;
-    var payload = { username: byId('admin-edit-username').value.trim() };
+    var payload = { username: byId('admin-edit-username').value.trim(), role: byId('admin-edit-role').value };
     if (password) payload.password = password;
     if (!payload.username || (password && password.length < 6)) {
       showMsg(byId('admin-edit-msg'), 'تحقق من اسم المستخدم وكلمة المرور (6 أحرف على الأقل).', true);
