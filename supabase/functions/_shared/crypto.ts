@@ -70,10 +70,11 @@ async function hmacSign(data: string, secret: string): Promise<string> {
 export interface AdminTokenPayload {
   sub: string;
   username: string;
+  is_super_admin?: boolean;
   exp: number;
 }
 
-export async function signAdminToken(payload: { sub: string; username: string }, secret: string, ttlSeconds = 8 * 3600): Promise<string> {
+export async function signAdminToken(payload: { sub: string; username: string; is_super_admin?: boolean }, secret: string, ttlSeconds = 8 * 3600): Promise<string> {
   const full: AdminTokenPayload = { ...payload, exp: Math.floor(Date.now() / 1000) + ttlSeconds };
   const body = toBase64Url(JSON.stringify(full));
   const sig = await hmacSign(body, secret);
