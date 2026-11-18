@@ -60,3 +60,20 @@ button{cursor:pointer}
 .modal-actions{display:flex;justify-content:flex-start;gap:9px;margin-top:24px;padding-top:18px;border-top:1px solid #edf0f5}
 #edit-modal-msg{margin-bottom:15px}
 @media(max-width:520px){.modal-card{padding:20px 16px}.modal-heading h2{font-size:17px}}
+
+.password-field{display:flex;align-items:stretch;gap:6px;width:100%}
+.password-field input{flex:1;min-width:0}
+.password-toggle{flex:0 0 auto;border:1px solid #e3e8f0;border-radius:8px;background:#f8faff;color:#53627a;padding:0 12px;font-size:11px}
+.password-toggle:hover{background:#edf2ff;color:#315ee8}
+.password-panel{max-width:620px}
+.password-form{display:grid;gap:16px}
+.password-form .field input{height:44px}
+.password-form>.btn{justify-self:start;min-width:170px}
+.delete-btn{color:#c43d39;border-color:#f2cfcd;background:#fff8f7}
+.delete-btn:hover{background:#fff0ef}
+.confirm-card{max-width:440px}
+.confirm-card h2{margin:0 0 10px;font-size:18px;color:#1b2942}
+.confirm-card p{line-height:1.9}
+.btn-danger{background:#d94b45;color:#fff}
+.btn-danger:hover{background:#bd3732}
+@media(max-width:560px){.password-form>.btn{width:100%}}
