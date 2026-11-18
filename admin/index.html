@@ -1,78 +1,111 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>شركة رواد التقنيات | لوحة الإدارة</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f7fb">
+  <title>رواد التقنيات | إدارة الشبكة</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <h1>لوحة إدارة الإنترنت — شركة رواد التقنيات</h1>
-      <button id="btn-logout" class="btn btn-sec" style="display:none;">تسجيل الخروج</button>
+  <section id="login-section" class="login-shell">
+    <div class="login-brand">
+      <div class="brand-mark">R</div>
+      <span>رواد التقنيات</span>
     </div>
-
-    <div id="admin-msg" class="msg" style="display:none;"></div>
-
-    <section id="login-section" class="card" style="max-width:420px;margin:40px auto;">
-      <h2>تسجيل دخول المدير</h2>
+    <div class="login-card">
+      <div class="eyebrow">بوابة الإدارة</div>
+      <h1>مرحباً بعودتك</h1>
+      <p class="muted">سجّل الدخول لإدارة حسابات شبكة الإنترنت.</p>
+      <div id="login-msg" class="notice hidden" role="alert"></div>
       <form id="admin-login-form">
-        <div style="margin-bottom:10px;">
-          <label for="adm-user">اسم المستخدم</label>
-          <input id="adm-user" type="text" required autocomplete="username" />
-        </div>
-        <div style="margin-bottom:14px;">
-          <label for="adm-pass">كلمة المرور</label>
-          <input id="adm-pass" type="password" required autocomplete="current-password" />
-        </div>
-        <button type="submit" class="btn" style="width:100%;">دخول</button>
+        <label for="adm-user">اسم المستخدم</label>
+        <input id="adm-user" name="username" autocomplete="username" required placeholder="أدخل اسم المستخدم">
+        <label for="adm-pass">كلمة المرور</label>
+        <input id="adm-pass" name="password" type="password" autocomplete="current-password" required placeholder="أدخل كلمة المرور">
+        <button class="btn btn-primary btn-wide" type="submit">تسجيل الدخول</button>
       </form>
-    </section>
+      <div class="login-foot">نظام إدارة نقاط الاتصال — رواد التقنيات</div>
+    </div>
+  </section>
 
-    <main id="dashboard-section" style="display:none;">
-      <section class="card">
-        <h2>إنشاء حساب جديد</h2>
-        <form id="create-user-form" class="grid">
-          <div>
-            <label for="new-username">اسم المستخدم</label>
-            <input id="new-username" type="text" required />
-          </div>
-          <div>
-            <label for="new-password">كلمة المرور</label>
-            <input id="new-password" type="password" required minlength="6" />
-          </div>
-          <div>
-            <label for="new-duration">المدة (بالدقائق)</label>
-            <input id="new-duration" type="number" min="1" value="180" required />
-          </div>
-          <div style="display:flex;align-items:flex-end;">
-            <button type="submit" class="btn" style="width:100%;">إنشاء الحساب</button>
-          </div>
-        </form>
+  <div id="app-shell" class="app-shell hidden">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-mark">R</div>
+        <div><strong>رواد التقنيات</strong><small>إدارة الشبكة</small></div>
+      </div>
+      <div class="side-label">القائمة الرئيسية</div>
+      <nav class="side-nav">
+        <button class="nav-link active" data-view="overview"><span class="nav-icon">▦</span> نظرة عامة</button>
+        <button class="nav-link" data-view="users"><span class="nav-icon">♙</span> حسابات الإنترنت</button>
+        <button class="nav-link" data-view="quotas"><span class="nav-icon">◷</span> الحصص المجانية</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="admin-chip"><span class="avatar">م</span><div><strong id="admin-name">المدير</strong><small>مدير النظام</small></div></div>
+        <button id="btn-logout" class="logout-btn">تسجيل الخروج <span>↪</span></button>
+      </div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <div>
+          <div class="topbar-kicker">إدارة الشبكة / <span id="breadcrumb">نظرة عامة</span></div>
+          <h1 id="page-title">نظرة عامة</h1>
+        </div>
+        <div class="top-actions">
+          <span class="connection"><i></i> النظام متصل</span>
+          <button id="btn-refresh" class="btn btn-light">↻ <span>تحديث البيانات</span></button>
+        </div>
+      </header>
+
+      <div id="admin-msg" class="notice hidden" role="status"></div>
+
+      <section id="view-overview" class="view">
+        <div class="welcome-row">
+          <div><h2>ملخص الشبكة</h2><p class="muted">نظرة سريعة على حالة حسابات الإنترنت المسجلة.</p></div>
+          <button class="btn btn-primary" data-go="users">＋ إنشاء حساب</button>
+        </div>
+        <div class="stats-grid">
+          <article class="stat-card"><div class="stat-top"><span>إجمالي الحسابات</span><b class="stat-icon blue">♙</b></div><strong id="stat-total">—</strong><small>جميع الحسابات المسجلة</small></article>
+          <article class="stat-card"><div class="stat-top"><span>حسابات نشطة</span><b class="stat-icon green">✓</b></div><strong id="stat-active">—</strong><small>بدأت مدة صلاحيتها ولم تنتهِ</small></article>
+          <article class="stat-card"><div class="stat-top"><span>بانتظار أول دخول</span><b class="stat-icon amber">◷</b></div><strong id="stat-pending">—</strong><small>لم تبدأ مدة الاستخدام بعد</small></article>
+          <article class="stat-card"><div class="stat-top"><span>حسابات معطلة</span><b class="stat-icon red">⊘</b></div><strong id="stat-disabled">—</strong><small>تم إيقافها من الإدارة</small></article>
+        </div>
+        <section class="panel">
+          <div class="panel-heading"><div><h2>أحدث الحسابات</h2><p class="muted">آخر الحسابات التي أُضيفت إلى النظام</p></div><button class="text-btn" data-go="users">عرض جميع الحسابات ←</button></div>
+          <div class="table-wrap"><table><thead><tr><th>اسم المستخدم</th><th>المدة</th><th>الحالة</th><th>تاريخ الإنشاء</th></tr></thead><tbody id="recent-users"><tr><td colspan="4" class="empty">جارٍ تحميل البيانات...</td></tr></tbody></table></div>
+        </section>
       </section>
 
-      <section class="card">
-        <div class="header" style="margin-bottom:8px;">
-          <h2>الحسابات المسجلة</h2>
-          <button id="btn-refresh" class="btn btn-sec" type="button">تحديث</button>
-        </div>
-        <div style="overflow-x:auto;">
-          <table>
-            <thead>
-              <tr>
-                <th>اسم المستخدم</th>
-                <th>المدة (دقيقة)</th>
-                <th>الحالة</th>
-                <th>أول دخول</th>
-                <th>تاريخ الانتهاء</th>
-                <th>الإجراءات</th>
-              </tr>
-            </thead>
-            <tbody id="users-tbody"></tbody>
-          </table>
-        </div>
+      <section id="view-users" class="view hidden">
+        <div class="welcome-row"><div><h2>حسابات الإنترنت</h2><p class="muted">إنشاء الحسابات وإدارة مددها وحالاتها.</p></div></div>
+        <section class="panel create-panel">
+          <div class="panel-heading"><div><h2>إنشاء حساب جديد</h2><p class="muted">تبدأ مدة الحساب عند أول تسجيل دخول ناجح.</p></div><span class="panel-symbol">＋</span></div>
+          <form id="create-user-form" class="create-grid">
+            <div class="field"><label for="new-username">اسم المستخدم</label><input id="new-username" required autocomplete="off" placeholder="مثال: user100"></div>
+            <div class="field"><label for="new-password">كلمة المرور</label><input id="new-password" type="password" minlength="6" required placeholder="6 أحرف على الأقل"></div>
+            <div class="field"><label for="new-duration">مدة الصلاحية بالدقائق</label><input id="new-duration" type="number" min="1" value="180" required></div>
+            <button type="submit" class="btn btn-primary create-submit">إنشاء الحساب</button>
+          </form>
+        </section>
+        <section class="panel">
+          <div class="panel-heading list-heading"><div><h2>جميع الحسابات</h2><p class="muted"><span id="users-count">0</span> حساب مسجل</p></div><div class="filters"><input id="users-search" class="search-input" type="search" placeholder="ابحث باسم المستخدم..."><select id="users-filter" aria-label="تصفية حسب الحالة"><option value="all">كل الحالات</option><option value="active">نشط</option><option value="pending">لم يبدأ</option><option value="expired">منتهي</option><option value="disabled">معطل</option></select></div></div>
+          <div class="table-wrap"><table><thead><tr><th>الحساب</th><th>المدة</th><th>الوقت المتبقي</th><th>الحالة</th><th>أول دخول</th><th>تاريخ الانتهاء</th><th>الإجراءات</th></tr></thead><tbody id="users-tbody"><tr><td colspan="7" class="empty">جارٍ تحميل البيانات...</td></tr></tbody></table></div>
+          <div id="users-empty" class="empty hidden">لا توجد حسابات تطابق البحث.</div>
+        </section>
       </section>
+
+      <section id="view-quotas" class="view hidden">
+        <div class="welcome-row"><div><h2>الحصص المجانية</h2><p class="muted">سجل استخدام الإنترنت المجاني حسب عنوان MAC وتاريخ الحصة.</p></div></div>
+        <section class="panel"><div class="panel-heading"><div><h2>سجل الحصص</h2><p class="muted">يعرض النظام آخر 200 سجل متاح.</p></div></div>
+          <div class="table-wrap"><table><thead><tr><th>عنوان MAC</th><th>تاريخ الحصة</th><th>بداية الاستخدام</th><th>انتهاء الحصة</th><th>تاريخ التسجيل</th></tr></thead><tbody id="quotas-tbody"><tr><td colspan="5" class="empty">جارٍ تحميل البيانات...</td></tr></tbody></table></div>
+        </section>
+      </section>
+      <footer class="footer">رواد التقنيات <span>•</span> نظام إدارة شبكة الإنترنت</footer>
     </main>
   </div>
 
