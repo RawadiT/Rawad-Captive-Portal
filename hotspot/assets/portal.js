@@ -5,6 +5,9 @@
   var msgBox = document.getElementById('msg-box');
   var btnFree = document.getElementById('btn-free');
   var btnLogin = document.getElementById('btn-login');
+  var btnToggleLogin = document.getElementById('btn-toggle-login');
+  var loginPanel = document.getElementById('login-panel');
+  var btnTogglePassword = document.getElementById('btn-toggle-password');
   var loginForm = document.getElementById('login-form');
   var hsForm = document.getElementById('hs-auth-form');
 
@@ -20,8 +23,48 @@
     if (btnFree) btnFree.disabled = busy;
     if (btnLogin) btnLogin.disabled = busy;
     if (activeBtn) {
-      activeBtn.innerHTML = busy ? '<span class="spinner"></span><span>' + label + '</span>' : label;
+      if (busy) {
+        if (!activeBtn.dataset.idleHtml) {
+          activeBtn.dataset.idleHtml = activeBtn.innerHTML;
+        }
+        activeBtn.innerHTML = '<span class="spinner"></span><span>' + label + '</span>';
+      } else {
+        activeBtn.innerHTML = activeBtn.dataset.idleHtml || label;
+      }
     }
+  }
+
+  function setLoginPanelOpen(open) {
+    if (!loginPanel || !btnToggleLogin) return;
+    loginPanel.classList.toggle('is-open', open);
+    btnToggleLogin.classList.toggle('is-open', open);
+    btnToggleLogin.setAttribute('aria-expanded', open ? 'true' : 'false');
+    loginPanel.setAttribute('aria-hidden', open ? 'false' : 'true');
+    if (open) {
+      var usernameEl = document.getElementById('username');
+      if (usernameEl) {
+        setTimeout(function () { usernameEl.focus(); }, 180);
+      }
+    }
+  }
+
+  if (btnToggleLogin && loginPanel) {
+    btnToggleLogin.addEventListener('click', function () {
+      var isOpen = loginPanel.classList.contains('is-open');
+      setLoginPanelOpen(!isOpen);
+    });
+  }
+
+  if (btnTogglePassword) {
+    btnTogglePassword.addEventListener('click', function () {
+      var passwordEl = document.getElementById('password');
+      if (!passwordEl) return;
+      var reveal = passwordEl.type === 'password';
+      passwordEl.type = reveal ? 'text' : 'password';
+      btnTogglePassword.textContent = reveal ? 'إخفاء' : 'إظهار';
+      btnTogglePassword.setAttribute('aria-pressed', reveal ? 'true' : 'false');
+      btnTogglePassword.setAttribute('aria-label', reveal ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور');
+    });
   }
 
   async function callPortalAuth(payload) {

@@ -5,49 +5,227 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="pragma" content="no-cache" />
   <meta http-equiv="expires" content="-1" />
-  <title>شركة رواد التقنيات | بوابة الإنترنت</title>
+  <title>روتانا - شركة رواد التقنيات | بوابة الإنترنت</title>
   <link rel="stylesheet" href="assets/style.css" />
 </head>
-<body>
-  <main class="card">
-    <img src="assets/logo.png" alt="شعار شركة رواد التقنيات" class="logo" />
-    <h1>شركة رواد التقنيات</h1>
-    <p class="sub">مرحباً بك في شبكة الضيوف. اختر طريقة الاتصال المناسبة.</p>
+<body class="portal-login-page">
+  <div class="lp-bg-canvas" aria-hidden="true">
+    <div class="lp-bg-grid"></div>
+    <div class="lp-bg-orb lp-bg-orb--1"></div>
+    <div class="lp-bg-orb lp-bg-orb--2"></div>
 
-    $(if error)<div class="msg err">$(error)</div>$(endif)
-    <div id="msg-box" class="msg" style="display:none;"></div>
+    <!-- Smartphone -->
+    <div class="lp-float-item lp-float-item--1" title="">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="6" y="2" width="12" height="20" rx="2.5" />
+        <line x1="12" y1="18" x2="12.01" y2="18" />
+        <line x1="10" y1="5" x2="14" y2="5" />
+      </svg>
+    </div>
 
-    <section class="section">
-      <div class="section-title">الإنترنت المجاني</div>
-      <div class="section-desc">30 دقيقة مجانية يومياً لكل جهاز (تتجدد عند منتصف الليل بتوقيت بغداد).</div>
-      <button id="btn-free" type="button" class="btn btn-free">الحصول على 30 دقيقة مجانية</button>
-    </section>
+    <!-- Desktop Computer -->
+    <div class="lp-float-item lp-float-item--2">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="3" width="20" height="14" rx="2" />
+        <line x1="8" y1="21" x2="16" y2="21" />
+        <line x1="12" y1="17" x2="12" y2="21" />
+      </svg>
+    </div>
 
-    <div class="divider">أو</div>
+    <!-- Laptop -->
+    <div class="lp-float-item lp-float-item--3">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9H4V6z" />
+        <path d="M2 18h20l-1.5 2h-17L2 18z" />
+      </svg>
+    </div>
 
-    <section class="section">
-      <div class="section-title">تسجيل الدخول بالحساب</div>
-      <form id="login-form" autocomplete="off">
-        <div class="field">
-          <label for="username">اسم المستخدم</label>
-          <input id="username" name="username" type="text" required autocomplete="username" />
+    <!-- Headphones -->
+    <div class="lp-float-item lp-float-item--4">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 14v-3a9 9 0 0 1 18 0v3" />
+        <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
+      </svg>
+    </div>
+
+    <!-- Phone Charger / Adapter -->
+    <div class="lp-float-item lp-float-item--5">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 22v-5" />
+        <path d="M9 8V3" />
+        <path d="M15 8V3" />
+        <path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z" />
+        <path d="M12 11l-1.5 2.5h3L12 16" />
+      </svg>
+    </div>
+
+    <!-- Mobile Phone Repair & Maintenance -->
+    <div class="lp-float-item lp-float-item--6">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+      </svg>
+    </div>
+
+    <!-- Computer Accessories (Mouse) -->
+    <div class="lp-float-item lp-float-item--7">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="6" y="3" width="12" height="18" rx="6" />
+        <line x1="12" y1="7" x2="12" y2="11" />
+      </svg>
+    </div>
+
+    <!-- Electronic Devices / Microchip -->
+    <div class="lp-float-item lp-float-item--8">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="7" y="7" width="10" height="10" rx="1.5" />
+        <path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3" />
+      </svg>
+    </div>
+
+    <!-- Wi-Fi & Connectivity -->
+    <div class="lp-float-item lp-float-item--9">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 12.55a11 11 0 0 1 14.08 0" />
+        <path d="M1.42 9a16 16 0 0 1 21.16 0" />
+        <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+        <circle cx="12" cy="20" r="1" fill="currentColor" />
+      </svg>
+    </div>
+
+    <!-- Rotana Company Logo Watermarks -->
+    <div class="lp-float-item lp-float-item--brand lp-float-item--10">
+      <img src="assets/logo.png" alt="" />
+    </div>
+    <div class="lp-float-item lp-float-item--brand lp-float-item--11">
+      <img src="assets/logo.png" alt="" />
+    </div>
+  </div>
+
+  <main class="lp-shell">
+    <section class="lp-card">
+      <!-- Prominent Company Logo with Subtle Animated Illumination -->
+      <div class="lp-brand-header">
+        <div class="lp-logo-stage">
+          <div class="lp-logo-glow" aria-hidden="true"></div>
+          <div class="lp-logo-beam" aria-hidden="true"></div>
+          <div class="lp-logo-frame">
+            <img src="assets/logo.png" alt="شعار روتانا - شركة رواد التقنيات" class="lp-logo" />
+          </div>
         </div>
-        <div class="field">
-          <label for="password">كلمة المرور</label>
-          <input id="password" name="password" type="password" required autocomplete="current-password" />
+        <div class="lp-brand-badge">
+          <span class="lp-badge-dot" aria-hidden="true"></span>
+          <span>بوابة الإنترنت الذكية</span>
         </div>
-        <button id="btn-login" type="submit" class="btn">تسجيل الدخول</button>
+        <h1 class="lp-title">روتانا - شركة رواد التقنيات</h1>
+        <p class="lp-subtitle">مرحباً بك في شبكة الضيوف. استمتع بتصفح سريع وآمن واختر طريقة الاتصال المناسبة.</p>
+      </div>
+
+      $(if error)<div class="msg err lp-msg-slot">$(error)</div>$(endif)
+      <div id="msg-box" class="msg lp-msg-slot" style="display:none;"></div>
+
+      <!-- Free Quota Card -->
+      <section class="lp-section lp-section--free">
+        <div class="lp-section-head">
+          <div class="lp-section-icon lp-section-icon--emerald" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M5 12.55a11 11 0 0 1 14.08 0" />
+              <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+              <circle cx="12" cy="20" r="1" fill="currentColor" />
+            </svg>
+          </div>
+          <div>
+            <h2 class="lp-section-title">الإنترنت المجاني</h2>
+            <p class="lp-section-desc">30 دقيقة مجانية يومياً لكل جهاز (تتجدد عند منتصف الليل بتوقيت بغداد).</p>
+          </div>
+        </div>
+        <button id="btn-free" type="button" class="btn btn-free lp-btn-free">
+          <svg class="lp-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+          </svg>
+          <span>الحصول على 30 دقيقة مجانية</span>
+        </button>
+      </section>
+
+      <div class="lp-divider"><span>أو</span></div>
+
+      <!-- Expandable Account Login Section -->
+      <section class="lp-section lp-section--account">
+        <button
+          id="btn-toggle-login"
+          type="button"
+          class="lp-toggle-btn"
+          aria-expanded="false"
+          aria-controls="login-panel"
+        >
+          <span class="lp-toggle-btn-main">
+            <span class="lp-section-icon lp-section-icon--blue" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </span>
+            <span class="lp-toggle-text">
+              <strong>تسجيل الدخول بالحساب</strong>
+              <small>للمشتركين وأصحاب الباقات الخاصة</small>
+            </span>
+          </span>
+          <span class="lp-toggle-chevron" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </span>
+        </button>
+
+        <div id="login-panel" class="lp-expand-panel" aria-hidden="true">
+          <div class="lp-expand-inner">
+            <form id="login-form" class="lp-login-form" autocomplete="off">
+              <div class="lp-field">
+                <label for="username">اسم المستخدم</label>
+                <div class="lp-input-wrap">
+                  <input id="username" name="username" type="text" required autocomplete="username" placeholder="أدخل اسم المستخدم" />
+                </div>
+              </div>
+              <div class="lp-field">
+                <label for="password">كلمة المرور</label>
+                <div class="lp-input-wrap lp-input-wrap--password">
+                  <input id="password" name="password" type="password" required autocomplete="current-password" placeholder="أدخل كلمة المرور" />
+                  <button
+                    id="btn-toggle-password"
+                    type="button"
+                    class="lp-pw-toggle"
+                    aria-label="إظهار كلمة المرور"
+                    aria-pressed="false"
+                  >إظهار</button>
+                </div>
+              </div>
+              <div class="lp-form-actions">
+                <button id="btn-login" type="submit" class="btn lp-btn-login">
+                  <svg class="lp-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                    <polyline points="10 17 15 12 10 7" />
+                    <line x1="15" y1="12" x2="3" y2="12" />
+                  </svg>
+                  <span>تسجيل الدخول</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <div class="lp-meta">
+        <span>الجهاز: <b dir="ltr">$(mac)</b></span>
+        <span class="lp-meta-sep" aria-hidden="true">|</span>
+        <span>العنوان: <b dir="ltr">$(ip)</b></span>
+      </div>
+
+      <form id="hs-auth-form" name="sendin" action="$(link-login-only)" method="post" style="display:none;">
+        <input type="hidden" name="username" value="rawad-gate" />
+        <input type="hidden" name="password" value="" />
+        <input type="hidden" name="dst" value="$(link-orig)" />
+        <input type="hidden" name="popup" value="true" />
       </form>
     </section>
-
-    <div class="meta">الجهاز: $(mac) | العنوان: $(ip)</div>
-
-    <form id="hs-auth-form" name="sendin" action="$(link-login-only)" method="post" style="display:none;">
-      <input type="hidden" name="username" value="rawad-gate" />
-      <input type="hidden" name="password" value="" />
-      <input type="hidden" name="dst" value="$(link-orig)" />
-      <input type="hidden" name="popup" value="true" />
-    </form>
   </main>
 
   <script>
