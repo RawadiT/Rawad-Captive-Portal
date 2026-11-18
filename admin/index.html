@@ -106,6 +106,28 @@
     </main>
   </div>
 
+  <div id="edit-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">
+    <section class="modal-card">
+      <div class="modal-heading">
+        <div><span class="eyebrow">إدارة الحساب</span><h2 id="edit-modal-title">تعديل بيانات الحساب</h2><p class="muted">يمكنك تحديث اسم المستخدم وكلمة المرور ومدة الصلاحية.</p></div>
+        <button type="button" id="edit-modal-close" class="modal-close" aria-label="إغلاق">×</button>
+      </div>
+      <div id="edit-modal-msg" class="notice hidden" role="alert"></div>
+      <form id="edit-user-form">
+        <input type="hidden" id="edit-user-id">
+        <div class="modal-fields">
+          <div class="field"><label for="edit-username">اسم المستخدم</label><input id="edit-username" required autocomplete="off"></div>
+          <div class="field"><label for="edit-password">كلمة المرور الجديدة</label><input id="edit-password" type="password" minlength="6" autocomplete="new-password" placeholder="اتركها فارغة دون تغيير"></div>
+          <div class="field"><label for="edit-duration">مدة الصلاحية بالدقائق</label><input id="edit-duration" type="number" min="1" required></div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="edit-cancel" class="btn btn-light">إلغاء</button>
+          <button type="submit" id="edit-save" class="btn btn-primary">حفظ التعديلات</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
   <script>
     window.RAWAD_ADMIN_CONFIG = {
       supabaseUrl: "https://YOUR_PROJECT_ID.supabase.co",
