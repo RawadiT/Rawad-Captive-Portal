@@ -184,7 +184,8 @@
 
   byId('create-user-form').addEventListener('submit', async function (event) {
     event.preventDefault();
-    var button = event.currentTarget.querySelector('button[type="submit"]');
+    var form = event.currentTarget;
+    var button = form.querySelector('button[type="submit"]');
     button.disabled = true;
     try {
       await api('/users', {
@@ -195,12 +196,69 @@
           duration_minutes: Number(byId('new-duration').value)
         })
       });
-      event.currentTarget.reset();
+      form.reset();
       byId('new-duration').value = 180;
       showMsg(msgBox, 'تم إنشاء الحساب بنجاح.', false);
       await loadUsers();
     } catch (error) { showMsg(msgBox, error.message, true); }
     finally { button.disabled = false; }
+  });
+
+  function openEditModal(user) {
+    hideMsg(byId('edit-modal-msg'));
+    byId('edit-user-id').value = user.id;
+    byId('edit-username').value = user.username || '';
+    byId('edit-password').value = '';
+    byId('edit-duration').value = user.duration_minutes;
+    byId('edit-modal').classList.remove('hidden');
+    setTimeout(function () { byId('edit-username').focus(); }, 0);
+  }
+  function closeEditModal() {
+    byId('edit-modal').classList.add('hidden');
+    byId('edit-user-form').reset();
+    hideMsg(byId('edit-modal-msg'));
+  }
+  byId('edit-modal-close').addEventListener('click', closeEditModal);
+  byId('edit-cancel').addEventListener('click', closeEditModal);
+  byId('edit-modal').addEventListener('click', function (event) {
+    if (event.target === byId('edit-modal')) closeEditModal();
+  });
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && !byId('edit-modal').classList.contains('hidden')) closeEditModal();
+  });
+  byId('edit-user-form').addEventListener('submit', async function (event) {
+    event.preventDefault();
+    var form = event.currentTarget;
+    var save = byId('edit-save');
+    var userId = byId('edit-user-id').value;
+    var username = byId('edit-username').value.trim();
+    var password = byId('edit-password').value;
+    var durationMinutes = Number(byId('edit-duration').value);
+    if (!username) {
+      showMsg(byId('edit-modal-msg'), 'اسم المستخدم مطلوب.', true);
+      return;
+    }
+    if (!Number.isInteger(durationMinutes) || durationMinutes < 1) {
+      showMsg(byId('edit-modal-msg'), 'أدخل مدة صحيحة بالدقائق.', true);
+      return;
+    }
+    if (password && password.length < 6) {
+      showMsg(byId('edit-modal-msg'), 'كلمة المرور يجب أن تتكون من 6 أحرف على الأقل.', true);
+      return;
+    }
+    var payload = { username: username, duration_minutes: durationMinutes };
+    if (password) payload.password = password;
+    save.disabled = true;
+    try {
+      await api('/users/' + userId, { method: 'PATCH', body: JSON.stringify(payload) });
+      closeEditModal();
+      showMsg(msgBox, 'تم حفظ تعديلات الحساب بنجاح.', false);
+      await loadUsers();
+    } catch (error) {
+      showMsg(byId('edit-modal-msg'), error.message, true);
+    } finally {
+      save.disabled = false;
+    }
   });
 
   byId('users-tbody').addEventListener('click', async function (event) {
@@ -210,23 +268,7 @@
     var user = users.find(function (u) { return u.id === (editId || toggleId); });
     if (!user) return;
     if (editId) {
-      var newDuration = prompt('أدخل مدة الحساب الجديدة بالدقائق:', String(user.duration_minutes));
-      if (newDuration === null) return;
-      if (!/^\d+$/.test(newDuration) || Number(newDuration) < 1) {
-        showMsg(msgBox, 'أدخل مدة صحيحة بالدقائق.', true); return;
-      }
-      var newPassword = prompt('أدخل كلمة مرور جديدة، أو اترك الحقل فارغاً دون تغيير:', '');
-      if (newPassword === null) return;
-      var payload = { duration_minutes: Number(newDuration) };
-      if (newPassword) {
-        if (newPassword.length < 6) { showMsg(msgBox, 'كلمة المرور يجب أن تتكون من 6 أحرف على الأقل.', true); return; }
-        payload.password = newPassword;
-      }
-      try {
-        await api('/users/' + user.id, { method: 'PATCH', body: JSON.stringify(payload) });
-        showMsg(msgBox, 'تم تعديل الحساب بنجاح.', false);
-        await loadUsers();
-      } catch (error) { showMsg(msgBox, error.message, true); }
+      openEditModal(user);
     }
     if (toggleId) {
       var disable = event.target.dataset.disabled === 'true';
