@@ -201,7 +201,7 @@ Deno.serve(async (req) => {
 
   const editMatch = subPath.match(/^\/users\/([0-9a-f-]{36})$/i);
   if (req.method === 'PATCH' && editMatch) {
-    if (!canManageOperations) return json({ error: 'تعديل بيانات الحسابات متاح للمدير العام ومدير الموقع فقط' }, 403);
+    if (!canManageOperations()) return json({ error: 'تعديل بيانات الحسابات متاح للمدير العام ومدير الموقع فقط' }, 403);
     const userId = editMatch[1];
     const body = await req.json().catch(() => ({}));
     const updates: Record<string, unknown> = {};
