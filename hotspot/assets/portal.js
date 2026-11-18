@@ -32,8 +32,7 @@
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': cfg.supabaseAnonKey,
-          'Authorization': 'Bearer ' + cfg.supabaseAnonKey
+          'apikey': cfg.supabasePublishableKey,
         },
         body: JSON.stringify(payload),
         signal: controller.signal
@@ -48,9 +47,43 @@
     }
   }
 
+  function saveSessionQuota(res) {
+    if (!res) return;
+    try {
+      var expiresAtMs = res.expires_at ? Date.parse(res.expires_at) : NaN;
+      if (!isFinite(expiresAtMs) && typeof res.remaining_seconds === 'number' && isFinite(res.remaining_seconds)) {
+        expiresAtMs = Date.now() + Math.max(0, res.remaining_seconds) * 1000;
+      }
+      if (!isFinite(expiresAtMs)) return;
+      var totalSec = (typeof res.remaining_seconds === 'number' && isFinite(res.remaining_seconds))
+        ? Math.max(1, Math.floor(res.remaining_seconds))
+        : Math.max(1, Math.round((expiresAtMs - Date.now()) / 1000));
+      sessionStorage.setItem('rawad_session_quota', JSON.stringify({
+        expiresAtMs: expiresAtMs,
+        totalSeconds: totalSec,
+        mac: cfg.mac || ''
+      }));
+    } catch (e) {}
+  }
+
   function completeHotspotLogin() {
-    if (!hsForm) return;
+    if (!hsForm) return false;
+
+    if (
+      typeof hexMD5 !== 'function' ||
+      !cfg.chapId ||
+      !cfg.chapChallenge
+    ) {
+      showMsg('تعذر تهيئة مصادقة MikroTik. يرجى إعادة تحميل الصفحة.', true);
+      return false;
+    }
+
+    hsForm.elements.username.value = 'rawad-gate';
+    hsForm.elements.password.value =
+      hexMD5(String(cfg.chapId) + 'rawad-gate' + String(cfg.chapChallenge));
+
     hsForm.submit();
+    return true;
   }
 
   if (btnFree) {
@@ -64,6 +97,7 @@
           ip: cfg.ip
         });
         var mins = Math.max(1, Math.ceil((res.remaining_seconds || 1800) / 60));
+        saveSessionQuota(res);
         showMsg('تم التحقق بنجاح (' + mins + ' دقيقة متاحة). جارٍ تفعيل الإنترنت...', false);
         completeHotspotLogin();
       } catch (err) {
@@ -88,7 +122,7 @@
       }
       setBusy(true, btnLogin, 'جارٍ تسجيل الدخول...');
       try {
-        await callPortalAuth({
+        var loginRes = await callPortalAuth({
           action: 'login',
           mac: cfg.mac,
           ip: cfg.ip,
@@ -96,6 +130,7 @@
           password: password
         });
         if (passwordEl) passwordEl.value = '';
+        saveSessionQuota(loginRes);
         showMsg('تم التحقق من الحساب بنجاح. جارٍ تفعيل الإنترنت...', false);
         completeHotspotLogin();
       } catch (err) {

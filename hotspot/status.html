@@ -3,28 +3,458 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="pragma" content="no-cache" />
+  <meta http-equiv="expires" content="-1" />
   <meta http-equiv="refresh" content="30" />
   <title>شركة رواد التقنيات | حالة الاتصال</title>
   <link rel="stylesheet" href="assets/style.css" />
 </head>
-<body>
-  <main class="card">
-    <img src="assets/logo.png" alt="شعار شركة رواد التقنيات" class="logo" />
-    <h1>تم الاتصال بالإنترنت</h1>
-    <p class="sub">جلستك نشطة الآن عبر شبكة ضيوف شركة رواد التقنيات.</p>
+<body class="post-login-page">
+  <div class="pl-bg-canvas" aria-hidden="true">
+    <div class="pl-bg-grid"></div>
+    <svg class="pl-network-svg" viewBox="0 0 1200 800" preserveAspectRatio="none">
+      <line class="pl-net-line" x1="120" y1="140" x2="380" y2="230" />
+      <line class="pl-net-line" x1="380" y1="230" x2="640" y2="120" />
+      <line class="pl-net-line" x1="640" y1="120" x2="980" y2="240" />
+      <line class="pl-net-line" x1="220" y1="590" x2="510" y2="480" />
+      <line class="pl-net-line" x1="510" y1="480" x2="860" y2="610" />
+      <line class="pl-net-line" x1="860" y1="610" x2="1080" y2="430" />
+      <circle class="pl-net-node" cx="120" cy="140" r="5" />
+      <circle class="pl-net-node pl-net-node--cyan" cx="380" cy="230" r="6" />
+      <circle class="pl-net-node" cx="640" cy="120" r="5" />
+      <circle class="pl-net-node pl-net-node--cyan" cx="980" cy="240" r="6" />
+      <circle class="pl-net-node" cx="220" cy="590" r="5" />
+      <circle class="pl-net-node pl-net-node--cyan" cx="510" cy="480" r="6" />
+      <circle class="pl-net-node" cx="860" cy="610" r="5" />
+      <circle class="pl-net-node pl-net-node--cyan" cx="1080" cy="430" r="5" />
+    </svg>
 
-    <div class="section">
-      <div class="stat-row"><span>عنوان الجهاز</span><span>$(mac)</span></div>
-      <div class="stat-row"><span>عنوان IP</span><span>$(ip)</span></div>
-      <div class="stat-row"><span>مدة الاتصال</span><span>$(uptime)</span></div>
-      $(if session-time-left)
-      <div class="stat-row"><span>الوقت المتبقي</span><span>$(session-time-left)</span></div>
-      $(endif)
+    <!-- Floating Technology Icons -->
+    <div class="pl-float-icon pl-float-icon--1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 12.55a11 11 0 0 1 14.08 0" />
+        <path d="M1.42 9a16 16 0 0 1 21.16 0" />
+        <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+        <circle cx="12" cy="20" r="1" fill="currentColor" />
+      </svg>
+    </div>
+    <div class="pl-float-icon pl-float-icon--2">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
+      </svg>
+    </div>
+    <div class="pl-float-icon pl-float-icon--3">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        <path d="m9 12 2 2 4-4" />
+      </svg>
+    </div>
+    <div class="pl-float-icon pl-float-icon--4">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M2 12h20" />
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+      </svg>
+    </div>
+    <div class="pl-float-icon pl-float-icon--5">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="13" width="20" height="8" rx="2" />
+        <path d="M6 17h.01" />
+        <path d="M10 17h.01" />
+        <path d="M16 13V7" />
+        <path d="M12 13V5" />
+        <path d="M8 13V9" />
+      </svg>
+    </div>
+    <div class="pl-float-icon pl-float-icon--6">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 20h.01" />
+        <path d="M7 20v-4" />
+        <path d="M12 20v-8" />
+        <path d="M17 20V8" />
+        <path d="M22 4v16" />
+      </svg>
     </div>
 
-    <form action="$(link-logout)" method="post">
-      <button type="submit" class="btn">تسجيل الخروج</button>
-    </form>
+    <div class="pl-particle pl-particle--1"></div>
+    <div class="pl-particle pl-particle--2"></div>
+    <div class="pl-particle pl-particle--3"></div>
+    <div class="pl-particle pl-particle--4"></div>
+  </div>
+
+  <main class="pl-shell">
+    <section class="pl-card">
+      <!-- 1. Large Prominent Centered Company Logo -->
+      <div class="pl-logo-wrap">
+        <img src="assets/logo.png" alt="شعار شركة رواد التقنيات" class="pl-logo" />
+      </div>
+
+      <!-- 2. Welcome Message Directly Below Logo -->
+      <h1 class="pl-title">مرحباً بك في شبكة شركة رواد التقنيات</h1>
+      <p class="pl-subtitle">تم الاتصال بالإنترنت بنجاح. جلستك نشطة ومؤمنة الآن عبر بوابة الضيوف.</p>
+
+      <!-- 3. Connection Status & Session Strip -->
+      <div class="pl-status-bar">
+        <span id="pl-status-pill" class="pl-status-pill">
+          <span class="pl-pulse-dot"></span>
+          <span id="pl-status-pill-text">متصل بالإنترنت</span>
+        </span>
+        <span class="pl-chip-sep" aria-hidden="true">|</span>
+        <span class="pl-session-chip">IP: <strong>$(ip)</strong></span>
+        <span class="pl-chip-sep" aria-hidden="true">|</span>
+        <span class="pl-session-chip">MAC: <strong>$(mac)</strong></span>
+      </div>
+
+      <!-- 4. Prominent Circular Countdown Timer -->
+      <div class="pl-timer-section">
+        <div id="pl-timer-ring-wrap" class="pl-timer-ring-wrap">
+          <svg class="pl-timer-svg" viewBox="0 0 220 220" aria-hidden="true">
+            <defs>
+              <linearGradient id="plTimerGradNormal" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#06b6d4" />
+                <stop offset="55%" stop-color="#0284c7" />
+                <stop offset="100%" stop-color="#2563eb" />
+              </linearGradient>
+              <linearGradient id="plTimerGradLow" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#f59e0b" />
+                <stop offset="100%" stop-color="#ef4444" />
+              </linearGradient>
+              <linearGradient id="plTimerGradExpired" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#ef4444" />
+                <stop offset="100%" stop-color="#b91c1c" />
+              </linearGradient>
+            </defs>
+            <circle class="pl-timer-track" cx="110" cy="110" r="96" />
+            <circle
+              id="pl-timer-progress"
+              class="pl-timer-progress"
+              cx="110"
+              cy="110"
+              r="96"
+              stroke-dasharray="603.19"
+              stroke-dashoffset="0"
+            />
+          </svg>
+          <div class="pl-timer-center">
+            <div id="pl-timer-label" class="pl-timer-label">الوقت المتبقي للإنترنت</div>
+            <div id="pl-timer-value" class="pl-timer-value">
+              $(if session-time-left)$(session-time-left)$(else)--:--$(endif)
+            </div>
+            <div id="pl-timer-state" class="pl-timer-state">
+              $(if session-time-left)جلسة نشطة$(else)غير متاح من الراوتر$(endif)
+            </div>
+          </div>
+        </div>
+        <div id="pl-timer-note" class="pl-timer-note">
+          $(if session-time-left)يتم تحديث عداد الوقت تلقائياً وفق رصيد الجلسة الفعلي.$(else)تعذر عرض عداد الحصة المتبقية لأن الراوتر لم يمرر متغير الوقت المتبقي (session-time-left).$(endif)
+        </div>
+      </div>
+
+      <!-- 5. Connection Information Cards -->
+      <div class="pl-stats-grid">
+        <div class="pl-stat-card">
+          <div class="pl-stat-icon pl-stat-icon--green">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M5 12.55a11 11 0 0 1 14.08 0" />
+              <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+              <circle cx="12" cy="20" r="1" fill="currentColor" />
+            </svg>
+          </div>
+          <div class="pl-stat-body">
+            <div class="pl-stat-label">حالة الاتصال</div>
+            <div id="pl-card-conn-state" class="pl-stat-val">متصل ونشط</div>
+          </div>
+        </div>
+
+        <div class="pl-stat-card">
+          <div class="pl-stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+          </div>
+          <div class="pl-stat-body">
+            <div class="pl-stat-label">الوقت المتبقي</div>
+            <div id="pl-card-remaining" class="pl-stat-val pl-stat-val--ltr">
+              $(if session-time-left)$(session-time-left)$(else)غير متاح$(endif)
+            </div>
+          </div>
+        </div>
+
+        <div class="pl-stat-card">
+          <div class="pl-stat-icon pl-stat-icon--indigo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2v4" />
+              <path d="M12 18v4" />
+              <path d="M4.93 4.93l2.83 2.83" />
+              <path d="M16.24 16.24l2.83 2.83" />
+              <path d="M2 12h4" />
+              <path d="M18 12h4" />
+              <circle cx="12" cy="12" r="4" />
+            </svg>
+          </div>
+          <div class="pl-stat-body">
+            <div class="pl-stat-label">مدة الاتصال</div>
+            <div id="pl-card-uptime" class="pl-stat-val pl-stat-val--ltr">$(uptime)</div>
+          </div>
+        </div>
+
+        <div class="pl-stat-card">
+          <div class="pl-stat-icon pl-stat-icon--cyan">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+          </div>
+          <div class="pl-stat-body">
+            <div class="pl-stat-label">البيانات المحمّلة</div>
+            <div class="pl-stat-val pl-stat-val--ltr">$(if bytes-out-nice)$(bytes-out-nice)$(else)--$(endif)</div>
+          </div>
+        </div>
+
+        <div class="pl-stat-card">
+          <div class="pl-stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+          </div>
+          <div class="pl-stat-body">
+            <div class="pl-stat-label">البيانات المرفوعة</div>
+            <div class="pl-stat-val pl-stat-val--ltr">$(if bytes-in-nice)$(bytes-in-nice)$(else)--$(endif)</div>
+          </div>
+        </div>
+
+        <div class="pl-stat-card">
+          <div class="pl-stat-icon pl-stat-icon--indigo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2" />
+              <line x1="8" y1="21" x2="16" y2="21" />
+              <line x1="12" y1="17" x2="12" y2="21" />
+            </svg>
+          </div>
+          <div class="pl-stat-body">
+            <div class="pl-stat-label">عنوان IP</div>
+            <div class="pl-stat-val pl-stat-val--ltr">$(ip)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 6. Interactive Actions (Existing MikroTik-Supported Actions Only) -->
+      <div class="pl-actions">
+        $(if link-orig)
+        <a href="$(link-orig)" class="pl-btn pl-btn--primary" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M2 12h20" />
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+          </svg>
+          <span>متابعة التصفح</span>
+        </a>
+        $(endif)
+
+        <a href="$(link-status)" class="pl-btn pl-btn--secondary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+            <path d="M21 3v5h-5" />
+          </svg>
+          <span>تحديث الحالة</span>
+        </a>
+
+        <form action="$(link-logout)" method="post" class="pl-action-form">
+          <button type="submit" class="pl-btn pl-btn--danger">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            <span>تسجيل الخروج</span>
+          </button>
+        </form>
+      </div>
+
+      <p class="pl-footer-note">يتم تحديث هذه الصفحة تلقائياً كل 30 ثانية للحفاظ على دقة بيانات الجلسة.</p>
+    </section>
   </main>
+
+  <script>
+    (function () {
+      var rawRemaining = "$(if session-time-left)$(session-time-left)$(endif)".trim();
+      var rawUptime = "$(uptime)".trim();
+      var currentMac = "$(mac)".trim().toUpperCase();
+      var linkLogin = "$(link-login)";
+
+      var ringWrap = document.getElementById("pl-timer-ring-wrap");
+      var progressEl = document.getElementById("pl-timer-progress");
+      var timerLabelEl = document.getElementById("pl-timer-label");
+      var timerValueEl = document.getElementById("pl-timer-value");
+      var timerStateEl = document.getElementById("pl-timer-state");
+      var timerNoteEl = document.getElementById("pl-timer-note");
+      var statusPillEl = document.getElementById("pl-status-pill");
+      var statusPillTextEl = document.getElementById("pl-status-pill-text");
+      var cardConnStateEl = document.getElementById("pl-card-conn-state");
+      var cardRemainingEl = document.getElementById("pl-card-remaining");
+      var cardUptimeEl = document.getElementById("pl-card-uptime");
+
+      var CIRCUMFERENCE = 2 * Math.PI * 96; // 603.1857...
+      if (progressEl) {
+        progressEl.style.strokeDasharray = CIRCUMFERENCE.toFixed(2);
+      }
+
+      function parseDuration(str) {
+        if (!str || str.indexOf("$(") !== -1) return null;
+        var s = str.trim().toLowerCase();
+        if (!s) return null;
+
+        // Match HH:MM:SS or MM:SS
+        if (/^\d{1,3}:\d{2}(:\d{2})?$/.test(s)) {
+          var parts = s.split(":").map(Number);
+          if (parts.length === 2) return parts[0] * 60 + parts[1];
+          if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+        }
+
+        // Match MikroTik format e.g. 1w2d3h4m5s
+        var total = 0;
+        var matched = false;
+        var re = /(\d+)\s*(w|d|h|m|s)/g;
+        var m;
+        while ((m = re.exec(s)) !== null) {
+          matched = true;
+          var n = parseInt(m[1], 10);
+          var u = m[2];
+          if (u === "w") total += n * 604800;
+          else if (u === "d") total += n * 86400;
+          else if (u === "h") total += n * 3600;
+          else if (u === "m") total += n * 60;
+          else if (u === "s") total += n;
+        }
+        if (matched) return total;
+
+        if (/^\d+$/.test(s)) return parseInt(s, 10);
+        return null;
+      }
+
+      function formatClock(sec) {
+        var s = Math.max(0, Math.floor(sec));
+        var h = Math.floor(s / 3600);
+        var m = Math.floor((s % 3600) / 60);
+        var r = s % 60;
+        var mm = (m < 10 ? "0" : "") + m;
+        var ss = (r < 10 ? "0" : "") + r;
+        if (h > 0) {
+          var hh = (h < 10 ? "0" : "") + h;
+          return hh + ":" + mm + ":" + ss;
+        }
+        return mm + ":" + ss;
+      }
+
+      var remSec = parseDuration(rawRemaining);
+      var upSec = parseDuration(rawUptime);
+      var expiresAtMs = null;
+      var storedTotalSec = null;
+
+      if (remSec === null) {
+        try {
+          var savedRaw = sessionStorage.getItem("rawad_session_quota");
+          if (savedRaw) {
+            var saved = JSON.parse(savedRaw);
+            var savedMac = (saved && saved.mac ? String(saved.mac).trim().toUpperCase() : "");
+            var macMatches = !savedMac || !currentMac || currentMac.indexOf("$(") !== -1 || savedMac === currentMac;
+            if (macMatches && saved && typeof saved.expiresAtMs === "number" && isFinite(saved.expiresAtMs)) {
+              expiresAtMs = saved.expiresAtMs;
+              remSec = Math.max(0, Math.floor((expiresAtMs - Date.now()) / 1000));
+              if (typeof saved.totalSeconds === "number" && isFinite(saved.totalSeconds) && saved.totalSeconds > 0) {
+                storedTotalSec = saved.totalSeconds;
+              }
+              if (timerNoteEl) {
+                timerNoteEl.textContent = "يتم تحديث عداد الوقت تلقائياً وفق رصيد الجلسة الفعلي.";
+              }
+            }
+          }
+        } catch (e) {}
+      }
+
+      if (remSec !== null) {
+        var totalSec = Math.max(
+          storedTotalSec || 0,
+          remSec + (upSec !== null ? upSec : 0),
+          1
+        );
+
+        var renderCountdown = function () {
+          var ratio = totalSec > 0 ? Math.max(0, Math.min(1, remSec / totalSec)) : 0;
+          var offset = CIRCUMFERENCE * (1 - ratio);
+          if (progressEl) {
+            progressEl.style.strokeDashoffset = offset.toFixed(2);
+          }
+
+          var formatted = formatClock(remSec);
+          if (timerValueEl) timerValueEl.textContent = formatted;
+          if (cardRemainingEl) cardRemainingEl.textContent = formatted;
+          if (upSec !== null && cardUptimeEl) {
+            cardUptimeEl.textContent = formatClock(upSec);
+          }
+
+          if (remSec <= 0) {
+            if (ringWrap) {
+              ringWrap.classList.remove("is-low");
+              ringWrap.classList.add("is-expired");
+            }
+            if (statusPillEl) {
+              statusPillEl.classList.remove("pl-status-pill--warn");
+              statusPillEl.classList.add("pl-status-pill--expired");
+            }
+            if (statusPillTextEl) statusPillTextEl.textContent = "انتهت مدة الجلسة";
+            if (timerLabelEl) timerLabelEl.textContent = "انتهى الرصيد المتاح";
+            if (timerStateEl) timerStateEl.textContent = "الجلسة منتهية";
+            if (cardConnStateEl) cardConnStateEl.textContent = "منتهية الصلاحية";
+            if (timerNoteEl) {
+              timerNoteEl.innerHTML = 'انتهت مدة جلستك الحالية. <a href="' + linkLogin + '" style="color:#0284c7;font-weight:700;">العودة لصفحة الدخول</a>';
+            }
+          } else if (remSec <= 300) {
+            if (ringWrap) {
+              ringWrap.classList.remove("is-expired");
+              ringWrap.classList.add("is-low");
+            }
+            if (statusPillEl) {
+              statusPillEl.classList.remove("pl-status-pill--expired");
+              statusPillEl.classList.add("pl-status-pill--warn");
+            }
+            if (statusPillTextEl) statusPillTextEl.textContent = "الوقت المتبقي منخفض";
+            if (timerStateEl) timerStateEl.textContent = "أقل من 5 دقائق";
+          } else {
+            if (ringWrap) ringWrap.classList.remove("is-low", "is-expired");
+            if (statusPillEl) statusPillEl.classList.remove("pl-status-pill--warn", "pl-status-pill--expired");
+            if (statusPillTextEl) statusPillTextEl.textContent = "متصل بالإنترنت";
+            if (timerStateEl) timerStateEl.textContent = "جلسة نشطة";
+          }
+        };
+
+        renderCountdown();
+        setInterval(function () {
+          if (expiresAtMs !== null) {
+            remSec = Math.max(0, Math.floor((expiresAtMs - Date.now()) / 1000));
+          } else if (remSec > 0) {
+            remSec -= 1;
+          }
+          if (upSec !== null && remSec > 0) upSec += 1;
+          renderCountdown();
+        }, 1000);
+      } else {
+        // Do not substitute uptime or invent a countdown when $(session-time-left) is unavailable
+        if (progressEl) {
+          progressEl.style.strokeDashoffset = CIRCUMFERENCE.toFixed(2);
+        }
+        if (upSec !== null) {
+          setInterval(function () {
+            upSec += 1;
+            if (cardUptimeEl) cardUptimeEl.textContent = formatClock(upSec);
+          }, 1000);
+        }
+      }
+    })();
+  </script>
 </body>
 </html>

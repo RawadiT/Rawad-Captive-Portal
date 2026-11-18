@@ -44,7 +44,7 @@
 
     <form id="hs-auth-form" name="sendin" action="$(link-login-only)" method="post" style="display:none;">
       <input type="hidden" name="username" value="rawad-gate" />
-      <input type="hidden" name="password" value="rawad-gate" />
+      <input type="hidden" name="password" value="" />
       <input type="hidden" name="dst" value="$(link-orig)" />
       <input type="hidden" name="popup" value="true" />
     </form>
@@ -52,12 +52,15 @@
 
   <script>
     window.RAWAD_PORTAL_CONFIG = {
-      supabaseUrl: "https://YOUR_PROJECT_ID.supabase.co",
-      supabaseAnonKey: "YOUR_SUPABASE_ANON_KEY",
+      supabaseUrl: "https://efqsmehqnhuzohzjztni.supabase.co",
+      supabasePublishableKey: "sb_publishable_M-MV6rjrnG2jPpi-8ISVOA_X4O8Cvoq",
       mac: "$(mac)",
-      ip: "$(ip)"
+      ip: "$(ip)",
+      chapId: "$(chap-id)",
+      chapChallenge: "$(chap-challenge)"
     };
   </script>
+  <script src="/md5.js"></script>
   <script src="assets/portal.js"></script>
 </body>
 </html>
