@@ -39,7 +39,9 @@
       <nav class="side-nav">
         <button class="nav-link active" data-view="overview"><span class="nav-icon">▦</span> نظرة عامة</button>
         <button class="nav-link" data-view="users"><span class="nav-icon">♙</span> حسابات الإنترنت</button>
-        <button class="nav-link" data-view="quotas"><span class="nav-icon">◷</span> الحصص المجانية</button>
+        <button class="nav-link" data-view="quotas" data-root-only><span class="nav-icon">◷</span> الحصص المجانية</button>
+        <button class="nav-link" data-view="admins" data-root-only><span class="nav-icon">♧</span> إدارة المدراء</button>
+        <button class="nav-link" data-view="password"><span class="nav-icon">⚿</span> كلمة المرور</button>
       </nav>
       <div class="sidebar-bottom">
         <div class="admin-chip"><span class="avatar">م</span><div><strong id="admin-name">المدير</strong><small>مدير النظام</small></div></div>
@@ -84,7 +86,7 @@
           <div class="panel-heading"><div><h2>إنشاء حساب جديد</h2><p class="muted">تبدأ مدة الحساب عند أول تسجيل دخول ناجح.</p></div><span class="panel-symbol">＋</span></div>
           <form id="create-user-form" class="create-grid">
             <div class="field"><label for="new-username">اسم المستخدم</label><input id="new-username" required autocomplete="off" placeholder="مثال: user100"></div>
-            <div class="field"><label for="new-password">كلمة المرور</label><input id="new-password" type="password" minlength="6" required placeholder="6 أحرف على الأقل"></div>
+            <div class="field"><label for="new-password">كلمة المرور</label><div class="password-field"><input id="new-password" type="password" minlength="6" required placeholder="6 أحرف على الأقل"><button type="button" class="password-toggle" data-toggle-password="new-password">إظهار</button></div></div>
             <div class="field"><label for="new-duration">مدة الصلاحية بالدقائق</label><input id="new-duration" type="number" min="1" value="180" required></div>
             <button type="submit" class="btn btn-primary create-submit">إنشاء الحساب</button>
           </form>
@@ -96,7 +98,37 @@
         </section>
       </section>
 
-      <section id="view-quotas" class="view hidden">
+      <section id="view-admins" class="view hidden" data-root-only>
+        <div class="welcome-row"><div><h2>حسابات المدراء</h2><p class="muted">إنشاء وإدارة حسابات الوصول إلى لوحة التحكم. المدير الأساسي محمي ولا يظهر ضمن الحسابات القابلة للحذف.</p></div></div>
+        <section class="panel create-panel">
+          <div class="panel-heading"><div><h2>إنشاء مدير فرعي</h2><p class="muted">المدير الفرعي يستطيع إنشاء حسابات إنترنت وتغيير كلمة مروره فقط.</p></div></div>
+          <form id="create-admin-form" class="create-grid">
+            <div class="field"><label for="new-admin-username">اسم المستخدم</label><input id="new-admin-username" required autocomplete="off"></div>
+            <div class="field"><label for="new-admin-password">كلمة المرور</label><div class="password-field"><input id="new-admin-password" type="password" minlength="6" required autocomplete="new-password"><button type="button" class="password-toggle" data-toggle-password="new-admin-password">إظهار</button></div></div>
+            <span class="muted">صلاحية: مدير فرعي</span>
+            <button type="submit" class="btn btn-primary create-submit">إنشاء المدير</button>
+          </form>
+        </section>
+        <section class="panel">
+          <div class="panel-heading"><div><h2>المدراء المسجلون</h2><p class="muted"><span id="admins-count">0</span> حساب إداري</p></div></div>
+          <div class="table-wrap"><table><thead><tr><th>اسم المستخدم</th><th>نوع الصلاحية</th><th>تاريخ الإنشاء</th><th>الإجراءات</th></tr></thead><tbody id="admins-tbody"><tr><td colspan="4" class="empty">جارٍ تحميل البيانات...</td></tr></tbody></table></div>
+        </section>
+      </section>
+
+      <section id="view-password" class="view hidden">
+        <div class="welcome-row"><div><h2>تغيير كلمة المرور</h2><p class="muted">يمكنك تغيير كلمة مرور حساب الإدارة الحالي بعد التحقق من كلمة المرور الحالية.</p></div></div>
+        <section class="panel password-panel">
+          <form id="change-password-form" class="password-form">
+            <div class="field"><label for="current-admin-password">كلمة المرور الحالية</label><div class="password-field"><input id="current-admin-password" type="password" required autocomplete="current-password"><button type="button" class="password-toggle" data-toggle-password="current-admin-password">إظهار</button></div></div>
+            <div class="field"><label for="new-admin-password-self">كلمة المرور الجديدة</label><div class="password-field"><input id="new-admin-password-self" type="password" minlength="6" required autocomplete="new-password"><button type="button" class="password-toggle" data-toggle-password="new-admin-password-self">إظهار</button></div></div>
+            <div class="field"><label for="confirm-admin-password">تأكيد كلمة المرور الجديدة</label><div class="password-field"><input id="confirm-admin-password" type="password" minlength="6" required autocomplete="new-password"><button type="button" class="password-toggle" data-toggle-password="confirm-admin-password">إظهار</button></div></div>
+            <div id="change-password-msg" class="notice hidden" role="alert"></div>
+            <button type="submit" id="change-password-submit" class="btn btn-primary">حفظ كلمة المرور</button>
+          </form>
+        </section>
+      </section>
+
+      <section id="view-quotas" class="view hidden" data-root-only>
         <div class="welcome-row"><div><h2>الحصص المجانية</h2><p class="muted">سجل استخدام الإنترنت المجاني حسب عنوان MAC وتاريخ الحصة.</p></div></div>
         <section class="panel"><div class="panel-heading"><div><h2>سجل الحصص</h2><p class="muted">يعرض النظام آخر 200 سجل متاح.</p></div></div>
           <div class="table-wrap"><table><thead><tr><th>عنوان MAC</th><th>تاريخ الحصة</th><th>بداية الاستخدام</th><th>انتهاء الحصة</th><th>تاريخ التسجيل</th></tr></thead><tbody id="quotas-tbody"><tr><td colspan="5" class="empty">جارٍ تحميل البيانات...</td></tr></tbody></table></div>
@@ -117,7 +149,7 @@
         <input type="hidden" id="edit-user-id">
         <div class="modal-fields">
           <div class="field"><label for="edit-username">اسم المستخدم</label><input id="edit-username" required autocomplete="off"></div>
-          <div class="field"><label for="edit-password">كلمة المرور الجديدة</label><input id="edit-password" type="password" minlength="6" autocomplete="new-password" placeholder="اتركها فارغة دون تغيير"></div>
+          <div class="field"><label for="edit-password">كلمة المرور الجديدة</label><div class="password-field"><input id="edit-password" type="password" minlength="6" autocomplete="new-password" placeholder="اتركها فارغة دون تغيير"><button type="button" class="password-toggle" data-toggle-password="edit-password">إظهار</button></div></div>
           <div class="field"><label for="edit-duration">مدة الصلاحية بالدقائق</label><input id="edit-duration" type="number" min="1" required></div>
         </div>
         <div class="modal-actions">
@@ -126,6 +158,25 @@
         </div>
       </form>
     </section>
+  </div>
+
+  <div id="admin-edit-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="admin-edit-title">
+    <section class="modal-card">
+      <div class="modal-heading"><div><span class="eyebrow">إدارة المدراء</span><h2 id="admin-edit-title">تعديل حساب المدير</h2><p class="muted">يمكن تغيير اسم المستخدم أو تعيين كلمة مرور جديدة.</p></div><button type="button" id="admin-edit-close" class="modal-close">×</button></div>
+      <div id="admin-edit-msg" class="notice hidden" role="alert"></div>
+      <form id="admin-edit-form">
+        <input type="hidden" id="admin-edit-id">
+        <div class="modal-fields">
+          <div class="field"><label for="admin-edit-username">اسم المستخدم</label><input id="admin-edit-username" required></div>
+          <div class="field"><label for="admin-edit-password">كلمة مرور جديدة (اختياري)</label><div class="password-field"><input id="admin-edit-password" type="password" minlength="6" placeholder="اتركها فارغة دون تغيير"><button type="button" class="password-toggle" data-toggle-password="admin-edit-password">إظهار</button></div></div>
+        </div>
+        <div class="modal-actions"><button type="button" id="admin-edit-cancel" class="btn btn-light">إلغاء</button><button type="submit" id="admin-edit-save" class="btn btn-primary">حفظ التعديلات</button></div>
+      </form>
+    </section>
+  </div>
+
+  <div id="confirm-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <section class="modal-card confirm-card"><h2 id="confirm-title">تأكيد العملية</h2><p id="confirm-text" class="muted"></p><div class="modal-actions"><button type="button" id="confirm-cancel" class="btn btn-light">إلغاء</button><button type="button" id="confirm-accept" class="btn btn-danger">تأكيد</button></div></section>
   </div>
 
   <script>
