@@ -241,7 +241,7 @@ Deno.serve(async (req) => {
   }
 
   if (req.method === 'GET' && subPath === '/free-quotas') {
-    if (!canManageOperations) return json({ error: 'عرض الحصص متاح للمدير العام ومدير الموقع فقط' }, 403);
+    if (!canManageOperations()) return json({ error: 'عرض الحصص متاح للمدير العام ومدير الموقع فقط' }, 403);
     const { data, error } = await db.from('free_quotas').select('*')
       .order('created_at', { ascending: false }).limit(200);
     if (error) return json({ error: error.message }, 500);
