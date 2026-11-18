@@ -12,8 +12,12 @@ CREATE TABLE IF NOT EXISTS public.admins (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   username TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
+  is_super_admin BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE public.admins
+  ADD COLUMN IF NOT EXISTS is_super_admin BOOLEAN NOT NULL DEFAULT false;
 
 -- 2. Time-limited customer accounts (duration starts on FIRST successful login)
 CREATE TABLE IF NOT EXISTS public.users (
