@@ -5,6 +5,7 @@
   var TOKEN_KEY = 'rawad_admin_jwt';
   var users = [];
   var quotas = [];
+  var admins = [];
   var currentAdmin = null;
   var msgBox = document.getElementById('admin-msg');
   var loginMsg = document.getElementById('login-msg');
@@ -110,9 +111,20 @@
     }).join('') : '<tr><td colspan="5" class="empty">لا توجد سجلات حصص مجانية حالياً.</td></tr>';
   }
   async function loadUsers() {
+    if (!currentAdmin || !currentAdmin.is_super_admin) return;
     var result = await api('/users', { method: 'GET' });
     users = result.users || [];
     renderStats(); renderRecent(); renderUsers();
+  }
+  async function loadAdmins() {
+    var result = await api('/admins', { method: 'GET' });
+    admins = result.admins || [];
+    byId('admins-count').textContent = admins.length.toLocaleString('ar-IQ');
+    byId('admins-tbody').innerHTML = admins.filter(function (a) { return !a.is_super_admin; }).map(function (a) {
+      return '<tr><td><strong>' + escapeHtml(a.username) + '</strong></td><td><span class="status status-pending">مدير فرعي</span></td><td>' +
+        dateTime(a.created_at) + '</td><td><div class="row-actions"><button class="mini-btn edit-btn" data-edit-admin="' + a.id + '">تعديل</button>' +
+        '<button class="mini-btn delete-btn" data-delete-admin="' + a.id + '">حذف</button></div></td></tr>';
+    }).join('') || '<tr><td colspan="4" class="empty">لا توجد حسابات مدراء فرعيين.</td></tr>';
   }
   async function loadQuotas() {
     var result = await api('/free-quotas', { method: 'GET' });
@@ -129,24 +141,37 @@
     finally { byId('btn-refresh').disabled = false; }
   }
   function showView(name) {
-    ['overview', 'users', 'quotas'].forEach(function (view) {
+    ['overview', 'users', 'quotas', 'admins', 'password'].forEach(function (view) {
       byId('view-' + view).classList.toggle('hidden', view !== name);
     });
     document.querySelectorAll('.nav-link').forEach(function (button) {
       button.classList.toggle('active', button.dataset.view === name);
     });
-    var labels = { overview: 'نظرة عامة', users: 'حسابات الإنترنت', quotas: 'الحصص المجانية' };
+    var labels = { overview: 'نظرة عامة', users: 'حسابات الإنترنت', quotas: 'الحصص المجانية', admins: 'إدارة المدراء', password: 'كلمة المرور' };
+    if ((name === 'admins' || name === 'quotas' || name === 'overview') && !currentAdmin.is_super_admin) {
+      showView('users');
+      return;
+    }
     byId('page-title').textContent = labels[name];
     byId('breadcrumb').textContent = labels[name];
     if (name === 'quotas') loadQuotas().catch(function (e) { showMsg(msgBox, e.message, true); });
-    if (name === 'users') renderUsers();
+    if (name === 'admins') loadAdmins().catch(function (e) { showMsg(msgBox, e.message, true); });
+    if (name === 'users' && currentAdmin.is_super_admin) renderUsers();
   }
   function showApp(loggedIn) {
     byId('login-section').classList.toggle('hidden', loggedIn);
     byId('app-shell').classList.toggle('hidden', !loggedIn);
     if (loggedIn) {
       byId('admin-name').textContent = currentAdmin && currentAdmin.username || 'المدير';
-      loadUsers().catch(function (e) { showMsg(msgBox, e.message, true); });
+      document.querySelectorAll('[data-root-only]').forEach(function (el) {
+        el.classList.toggle('hidden', !currentAdmin || !currentAdmin.is_super_admin);
+      });
+      if (currentAdmin && currentAdmin.is_super_admin) {
+        loadUsers().catch(function (e) { showMsg(msgBox, e.message, true); });
+      } else {
+        showView('users');
+        byId('view-users').querySelector('.panel:not(.create-panel)').classList.add('hidden');
+      }
     }
   }
 
@@ -262,6 +287,19 @@
   });
 
   byId('users-tbody').addEventListener('click', async function (event) {
+    if (event.target.dataset.deleteUser) {
+      if (!currentAdmin || !currentAdmin.is_super_admin) return;
+      var targetUser = users.find(function (u) { return u.id === event.target.dataset.deleteUser; });
+      if (!targetUser) return;
+      askConfirm('حذف حساب الإنترنت', 'سيتم حذف الحساب "' + targetUser.username + '" نهائياً من قاعدة البيانات. لا يمكن التراجع عن هذه العملية.', async function () {
+        try {
+          await api('/users/' + targetUser.id, { method: 'DELETE' });
+          showMsg(msgBox, 'تم حذف حساب الإنترنت نهائياً.', false);
+          await loadUsers();
+        } catch (error) { showMsg(msgBox, error.message, true); }
+      });
+      return;
+    }
     var editId = event.target.dataset.edit;
     var toggleId = event.target.dataset.toggle;
     if (!editId && !toggleId) return;
@@ -272,7 +310,7 @@
     }
     if (toggleId) {
       var disable = event.target.dataset.disabled === 'true';
-      if (!confirm(disable ? 'هل تريد تعطيل هذا الحساب؟' : 'هل تريد إعادة تفعيل هذا الحساب؟')) return;
+      askConfirm(disable ? 'تعطيل الحساب' : 'إعادة تفعيل الحساب', disable ? 'هل تريد تعطيل هذا الحساب؟' : 'هل تريد إعادة تفعيل هذا الحساب؟', async function () {
       try {
         await api('/users/' + user.id + '/status', {
           method: 'PATCH', body: JSON.stringify({ is_disabled: disable })
@@ -280,7 +318,126 @@
         showMsg(msgBox, disable ? 'تم تعطيل الحساب.' : 'تم تفعيل الحساب.', false);
         await loadUsers();
       } catch (error) { showMsg(msgBox, error.message, true); }
+      });
     }
+  });
+
+  function askConfirm(title, message, action) {
+    byId('confirm-title').textContent = title;
+    byId('confirm-text').textContent = message;
+    byId('confirm-modal').classList.remove('hidden');
+    var accept = byId('confirm-accept');
+    var cancel = byId('confirm-cancel');
+    function cleanup() {
+      byId('confirm-modal').classList.add('hidden');
+      accept.removeEventListener('click', onAccept);
+      cancel.removeEventListener('click', onCancel);
+    }
+    function onCancel() { cleanup(); }
+    async function onAccept() { cleanup(); await action(); }
+    accept.addEventListener('click', onAccept);
+    cancel.addEventListener('click', onCancel);
+  }
+
+  document.querySelectorAll('[data-toggle-password]').forEach(function (button) {
+    button.addEventListener('click', function () {
+      var input = byId(button.dataset.togglePassword);
+      if (!input) return;
+      input.type = input.type === 'password' ? 'text' : 'password';
+      button.textContent = input.type === 'password' ? 'إظهار' : 'إخفاء';
+    });
+  });
+
+  byId('create-admin-form').addEventListener('submit', async function (event) {
+    event.preventDefault();
+    var form = event.currentTarget;
+    var button = form.querySelector('button[type="submit"]');
+    button.disabled = true;
+    try {
+      await api('/admins', { method: 'POST', body: JSON.stringify({
+        username: byId('new-admin-username').value.trim(),
+        password: byId('new-admin-password').value
+      }) });
+      form.reset();
+      showMsg(msgBox, 'تم إنشاء حساب المدير الفرعي بنجاح.', false);
+      await loadAdmins();
+    } catch (error) { showMsg(msgBox, error.message, true); }
+    finally { button.disabled = false; }
+  });
+
+  function openAdminEdit(admin) {
+    byId('admin-edit-id').value = admin.id;
+    byId('admin-edit-username').value = admin.username;
+    byId('admin-edit-password').value = '';
+    hideMsg(byId('admin-edit-msg'));
+    byId('admin-edit-modal').classList.remove('hidden');
+  }
+  function closeAdminEdit() {
+    byId('admin-edit-modal').classList.add('hidden');
+    byId('admin-edit-form').reset();
+  }
+  byId('admin-edit-close').addEventListener('click', closeAdminEdit);
+  byId('admin-edit-cancel').addEventListener('click', closeAdminEdit);
+  byId('admin-edit-form').addEventListener('submit', async function (event) {
+    event.preventDefault();
+    var button = byId('admin-edit-save');
+    var id = byId('admin-edit-id').value;
+    var password = byId('admin-edit-password').value;
+    var payload = { username: byId('admin-edit-username').value.trim() };
+    if (password) payload.password = password;
+    if (!payload.username || (password && password.length < 6)) {
+      showMsg(byId('admin-edit-msg'), 'تحقق من اسم المستخدم وكلمة المرور (6 أحرف على الأقل).', true);
+      return;
+    }
+    button.disabled = true;
+    try {
+      await api('/admins/' + id, { method: 'PATCH', body: JSON.stringify(payload) });
+      closeAdminEdit();
+      showMsg(msgBox, 'تم تحديث حساب المدير.', false);
+      await loadAdmins();
+    } catch (error) { showMsg(byId('admin-edit-msg'), error.message, true); }
+    finally { button.disabled = false; }
+  });
+  byId('admins-tbody').addEventListener('click', function (event) {
+    var editId = event.target.dataset.editAdmin;
+    var deleteId = event.target.dataset.deleteAdmin;
+    if (editId) {
+      var admin = admins.find(function (a) { return a.id === editId && !a.is_super_admin; });
+      if (admin) openAdminEdit(admin);
+    }
+    if (deleteId) {
+      var target = admins.find(function (a) { return a.id === deleteId && !a.is_super_admin; });
+      if (!target) return;
+      askConfirm('حذف حساب المدير', 'سيتم حذف حساب المدير الفرعي "' + target.username + '" نهائياً.', async function () {
+        try {
+          await api('/admins/' + target.id, { method: 'DELETE' });
+          showMsg(msgBox, 'تم حذف حساب المدير الفرعي.', false);
+          await loadAdmins();
+        } catch (error) { showMsg(msgBox, error.message, true); }
+      });
+    }
+  });
+
+  byId('change-password-form').addEventListener('submit', async function (event) {
+    event.preventDefault();
+    var button = byId('change-password-submit');
+    var currentPassword = byId('current-admin-password').value;
+    var newPassword = byId('new-admin-password-self').value;
+    var confirmPassword = byId('confirm-admin-password').value;
+    if (newPassword !== confirmPassword) {
+      showMsg(byId('change-password-msg'), 'كلمتا المرور الجديدتان غير متطابقتين.', true);
+      return;
+    }
+    button.disabled = true;
+    try {
+      await api('/change-password', { method: 'POST', body: JSON.stringify({
+        current_password: currentPassword, new_password: newPassword
+      }) });
+      byId('change-password-form').reset();
+      document.querySelectorAll('[data-toggle-password]').forEach(function (b) { b.textContent = 'إظهار'; });
+      showMsg(byId('change-password-msg'), 'تم تغيير كلمة المرور بنجاح.', false);
+    } catch (error) { showMsg(byId('change-password-msg'), error.message, true); }
+    finally { button.disabled = false; }
   });
 
   byId('btn-logout').addEventListener('click', function () {
