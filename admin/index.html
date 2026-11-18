@@ -8,9 +8,10 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div class="ambient-background" aria-hidden="true"><span class="ambient-orb orb-one"></span><span class="ambient-orb orb-two"></span><span class="ambient-orb orb-three"></span><span class="ambient-symbol symbol-one">⌁</span><span class="ambient-symbol symbol-two">✧</span><span class="ambient-symbol symbol-three">◈</span><span class="ambient-symbol symbol-four">⌘</span></div>
   <section id="login-section" class="login-shell">
     <div class="login-brand">
-      <div class="brand-mark">R</div>
+      <img class="brand-logo" src="../hotspot/assets/logo.png" alt="شعار رواد التقنيات">
       <span>رواد التقنيات</span>
     </div>
     <div class="login-card">
@@ -32,15 +33,15 @@
   <div id="app-shell" class="app-shell hidden">
     <aside class="sidebar" id="sidebar">
       <div class="brand">
-        <div class="brand-mark">R</div>
+        <img class="brand-logo" src="../hotspot/assets/logo.png" alt="شعار رواد التقنيات">
         <div><strong>رواد التقنيات</strong><small>إدارة الشبكة</small></div>
       </div>
       <div class="side-label">القائمة الرئيسية</div>
       <nav class="side-nav">
-        <button class="nav-link active" data-view="overview" data-root-only><span class="nav-icon">▦</span> نظرة عامة</button>
+        <button class="nav-link active" data-view="overview" data-manager-only><span class="nav-icon">▦</span> نظرة عامة</button>
         <button class="nav-link" data-view="users"><span class="nav-icon">♙</span> حسابات الإنترنت</button>
-        <button class="nav-link" data-view="quotas" data-root-only><span class="nav-icon">◷</span> الحصص المجانية</button>
-        <button class="nav-link" data-view="admins" data-root-only><span class="nav-icon">♧</span> إدارة المدراء</button>
+        <button class="nav-link" data-view="quotas" data-manager-only><span class="nav-icon">◷</span> الحصص المجانية</button>
+        <button class="nav-link" data-view="admins" data-owner-only><span class="nav-icon">♧</span> إدارة المدراء</button>
         <button class="nav-link" data-view="password"><span class="nav-icon">⚿</span> كلمة المرور</button>
       </nav>
       <div class="sidebar-bottom">
@@ -57,7 +58,7 @@
         </div>
         <div class="top-actions">
           <span class="connection"><i></i> النظام متصل</span>
-          <button id="btn-refresh" class="btn btn-light" data-root-only>↻ <span>تحديث البيانات</span></button>
+          <button id="btn-refresh" class="btn btn-light" data-manager-only>↻ <span>تحديث البيانات</span></button>
         </div>
       </header>
 
@@ -98,14 +99,14 @@
         </section>
       </section>
 
-      <section id="view-admins" class="view hidden" data-root-only>
+      <section id="view-admins" class="view hidden" data-owner-only>
         <div class="welcome-row"><div><h2>حسابات المدراء</h2><p class="muted">إنشاء وإدارة حسابات الوصول إلى لوحة التحكم. المدير الأساسي محمي ولا يظهر ضمن الحسابات القابلة للحذف.</p></div></div>
         <section class="panel create-panel">
           <div class="panel-heading"><div><h2>إنشاء مدير فرعي</h2><p class="muted">المدير الفرعي يستطيع إنشاء حسابات إنترنت وتغيير كلمة مروره فقط.</p></div></div>
           <form id="create-admin-form" class="create-grid">
             <div class="field"><label for="new-admin-username">اسم المستخدم</label><input id="new-admin-username" required autocomplete="off"></div>
             <div class="field"><label for="new-admin-password">كلمة المرور</label><div class="password-field"><input id="new-admin-password" type="password" minlength="6" required autocomplete="new-password"><button type="button" class="password-toggle" data-toggle-password="new-admin-password">إظهار</button></div></div>
-            <span class="muted">صلاحية: مدير فرعي</span>
+            <div class="field"><label for="new-admin-role">نوع الصلاحية</label><select id="new-admin-role" required><option value="subordinate">مدير فرعي</option><option value="general">مدير عام</option></select></div>
             <button type="submit" class="btn btn-primary create-submit">إنشاء المدير</button>
           </form>
         </section>
@@ -128,7 +129,7 @@
         </section>
       </section>
 
-      <section id="view-quotas" class="view hidden" data-root-only>
+      <section id="view-quotas" class="view hidden" data-manager-only>
         <div class="welcome-row"><div><h2>الحصص المجانية</h2><p class="muted">سجل استخدام الإنترنت المجاني حسب عنوان MAC وتاريخ الحصة.</p></div></div>
         <section class="panel"><div class="panel-heading"><div><h2>سجل الحصص</h2><p class="muted">يعرض النظام آخر 200 سجل متاح.</p></div></div>
           <div class="table-wrap"><table><thead><tr><th>عنوان MAC</th><th>تاريخ الحصة</th><th>بداية الاستخدام</th><th>انتهاء الحصة</th><th>تاريخ التسجيل</th></tr></thead><tbody id="quotas-tbody"><tr><td colspan="5" class="empty">جارٍ تحميل البيانات...</td></tr></tbody></table></div>
@@ -169,6 +170,7 @@
         <div class="modal-fields">
           <div class="field"><label for="admin-edit-username">اسم المستخدم</label><input id="admin-edit-username" required></div>
           <div class="field"><label for="admin-edit-password">كلمة مرور جديدة (اختياري)</label><div class="password-field"><input id="admin-edit-password" type="password" minlength="6" placeholder="اتركها فارغة دون تغيير"><button type="button" class="password-toggle" data-toggle-password="admin-edit-password">إظهار</button></div></div>
+          <div class="field"><label for="admin-edit-role">نوع الصلاحية</label><select id="admin-edit-role" required><option value="subordinate">مدير فرعي</option><option value="general">مدير عام</option></select></div>
         </div>
         <div class="modal-actions"><button type="button" id="admin-edit-cancel" class="btn btn-light">إلغاء</button><button type="submit" id="admin-edit-save" class="btn btn-primary">حفظ التعديلات</button></div>
       </form>
