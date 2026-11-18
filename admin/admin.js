@@ -167,6 +167,7 @@
         el.classList.toggle('hidden', !currentAdmin || !currentAdmin.is_super_admin);
       });
       if (currentAdmin && currentAdmin.is_super_admin) {
+        byId('view-users').querySelector('.panel:not(.create-panel)').classList.remove('hidden');
         loadUsers().catch(function (e) { showMsg(msgBox, e.message, true); });
       } else {
         showView('users');
