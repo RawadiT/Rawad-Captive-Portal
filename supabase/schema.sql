@@ -13,11 +13,14 @@ CREATE TABLE IF NOT EXISTS public.admins (
   username TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   is_super_admin BOOLEAN NOT NULL DEFAULT false,
+  role TEXT NOT NULL DEFAULT 'subordinate' CHECK (role IN ('site_owner', 'general', 'subordinate')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 ALTER TABLE public.admins
   ADD COLUMN IF NOT EXISTS is_super_admin BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE public.admins
+  ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'subordinate';
 
 -- 2. Time-limited customer accounts (duration starts on FIRST successful login)
 CREATE TABLE IF NOT EXISTS public.users (
