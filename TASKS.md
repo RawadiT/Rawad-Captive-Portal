@@ -40,3 +40,4 @@
 - [x] Phase 3: Unified Light Daytime Admin Dashboard (`admin/`) + browser verification.
 - [x] Phase 4: Lab `ROUTER_SHARED_SECRET` + CHR `on-login`/`revocations` + unified Customer Portal (`hotspot/`) + live `RAWAD-WIN10-CLIENT` E2E test.
 - [x] Phase 5: Isolated static admin container on `Rawad-CHR-Lab` (`x86_64` ONLY) + backup documentation + final PG 17 regression & Git sync.
+- [x] Lab Admin Access Restoration (2026-11-20): Diagnosed Adapter 3 (`ether3`) missing IP + Win10 VM isolation rules, configured `192.168.56.2/24` on `ether3` + scoped `dstnat`/`forward` rules for `192.168.56.1` (Win11) and `192.168.88.250` (Win10 VM) without exposing WAN or breaking HotSpot, verified across CHR reboot.
