@@ -39,4 +39,4 @@
 - [x] Phase 2: Edge Functions (`_shared/crypto.ts`, `admin-api`, `portal-auth`, `verify-mac`) + live deployment & HTTP verification on `Rawad Test`.
 - [x] Phase 3: Unified Light Daytime Admin Dashboard (`admin/`) + browser verification.
 - [x] Phase 4: Lab `ROUTER_SHARED_SECRET` + CHR `on-login`/`revocations` + unified Customer Portal (`hotspot/`) + live `RAWAD-WIN10-CLIENT` E2E test.
-- [ ] Phase 5: Isolated static admin container on `Rawad-CHR-Lab` (`x86_64` ONLY) + backup documentation + final PG 17 regression & Git sync.
+- [x] Phase 5: Isolated static admin container on `Rawad-CHR-Lab` (`x86_64` ONLY) + backup documentation + final PG 17 regression & Git sync.
