@@ -114,10 +114,10 @@
         </div>
         <div class="lp-brand-badge">
           <span class="lp-badge-dot" aria-hidden="true"></span>
-          <span>بوابة الإنترنت الذكية</span>
+          <span id="portal-badge">شبكة رواد</span>
         </div>
-        <h1 class="lp-title">روتانا - شركة رواد التقنيات</h1>
-        <p class="lp-subtitle">مرحباً بك في شبكة الضيوف. استمتع بتصفح سريع وآمن واختر طريقة الاتصال المناسبة.</p>
+        <h1 id="portal-title" class="lp-title">روتانا - شركة رواد التقنيات</h1>
+        <p id="portal-subtitle" class="lp-subtitle">مرحباً بك في شبكة الضيوف. استمتع بتصفح سريع وآمن واختر طريقة الاتصال المناسبة.</p>
       </div>
 
       $(if error)<div class="msg err lp-msg-slot">$(error)</div>$(endif)
@@ -135,7 +135,7 @@
           </div>
           <div>
             <h2 class="lp-section-title">الإنترنت المجاني</h2>
-            <p class="lp-section-desc">30 دقيقة مجانية يومياً لكل جهاز (تتجدد عند منتصف الليل بتوقيت بغداد).</p>
+            <p id="portal-free-notice" class="lp-section-desc">30 دقيقة مجانية يومياً لكل جهاز (تتجدد عند منتصف الليل بتوقيت بغداد).</p>
           </div>
         </div>
         <button id="btn-free" type="button" class="btn btn-free lp-btn-free">
@@ -218,6 +218,7 @@
         <span class="lp-meta-sep" aria-hidden="true">|</span>
         <span>العنوان: <b dir="ltr">$(ip)</b></span>
       </div>
+      <div class="rawad-powered-by" dir="ltr">Powered BY Hashim Hasanen</div>
 
       <form id="hs-auth-form" name="sendin" action="$(link-login-only)" method="post" style="display:none;">
         <input type="hidden" name="username" value="rawad-gate" />

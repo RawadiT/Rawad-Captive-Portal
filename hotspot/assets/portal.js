@@ -93,21 +93,46 @@
   function saveSessionQuota(res) {
     if (!res) return;
     try {
-      var expiresAtMs = res.expires_at ? Date.parse(res.expires_at) : NaN;
-      if (!isFinite(expiresAtMs) && typeof res.remaining_seconds === 'number' && isFinite(res.remaining_seconds)) {
+      var isUnlimited = !!res.is_unlimited;
+      var expiresAtMs = (!isUnlimited && res.expires_at) ? Date.parse(res.expires_at) : NaN;
+      if (!isUnlimited && !isFinite(expiresAtMs) && typeof res.remaining_seconds === 'number' && isFinite(res.remaining_seconds)) {
         expiresAtMs = Date.now() + Math.max(0, res.remaining_seconds) * 1000;
       }
-      if (!isFinite(expiresAtMs)) return;
-      var totalSec = (typeof res.remaining_seconds === 'number' && isFinite(res.remaining_seconds))
+      var totalSec = (!isUnlimited && typeof res.remaining_seconds === 'number' && isFinite(res.remaining_seconds))
         ? Math.max(1, Math.floor(res.remaining_seconds))
-        : Math.max(1, Math.round((expiresAtMs - Date.now()) / 1000));
+        : (isFinite(expiresAtMs) ? Math.max(1, Math.round((expiresAtMs - Date.now()) / 1000)) : null);
       sessionStorage.setItem('rawad_session_quota', JSON.stringify({
-        expiresAtMs: expiresAtMs,
+        statusToken: res.status_token || '',
+        sessionType: res.session_type || '',
+        isUnlimited: isUnlimited,
+        expiresAtMs: isFinite(expiresAtMs) ? expiresAtMs : null,
         totalSeconds: totalSec,
         mac: cfg.mac || ''
       }));
     } catch (e) {}
   }
+
+  (function loadPortalSettings() {
+    if (!cfg.supabaseUrl || !cfg.supabasePublishableKey) return;
+    fetch(cfg.supabaseUrl + '/functions/v1/portal-auth', {
+      method: 'GET',
+      headers: { 'apikey': cfg.supabasePublishableKey }
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var s = data && data.settings;
+        if (!s) return;
+        var badgeEl = document.getElementById('portal-badge');
+        var titleEl = document.getElementById('portal-title');
+        var subEl = document.getElementById('portal-subtitle');
+        var noticeEl = document.getElementById('portal-free-notice');
+        if (badgeEl && s.site_title) badgeEl.textContent = s.site_title;
+        if (titleEl && s.welcome_title) titleEl.textContent = s.welcome_title;
+        if (subEl && s.welcome_subtitle) subEl.textContent = s.welcome_subtitle;
+        if (noticeEl && s.free_notice) noticeEl.textContent = s.free_notice;
+      })
+      .catch(function () {});
+  })();
 
   function completeHotspotLogin() {
     if (!hsForm) return false;

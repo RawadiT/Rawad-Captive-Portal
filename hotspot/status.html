@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="pragma" content="no-cache" />
   <meta http-equiv="expires" content="-1" />
-  <meta http-equiv="refresh" content="30" />
   <title>شركة رواد التقنيات | حالة الاتصال</title>
   <link rel="stylesheet" href="assets/style.css" />
 </head>
@@ -90,8 +89,8 @@
       </div>
 
       <!-- 2. Welcome Message Directly Below Logo -->
-      <h1 class="pl-title">مرحباً بك في شبكة شركة رواد التقنيات</h1>
-      <p class="pl-subtitle">تم الاتصال بالإنترنت بنجاح. جلستك نشطة ومؤمنة الآن عبر بوابة الضيوف.</p>
+      <h1 id="pl-title" class="pl-title">مرحباً بك في شبكة شركة رواد التقنيات</h1>
+      <p id="pl-subtitle" class="pl-subtitle">تم الاتصال بالإنترنت بنجاح. جلستك نشطة ومؤمنة الآن عبر بوابة الضيوف.</p>
 
       <!-- 3. Connection Status & Session Strip -->
       <div class="pl-status-bar">
@@ -275,12 +274,26 @@
         </form>
       </div>
 
-      <p class="pl-footer-note">يتم تحديث هذه الصفحة تلقائياً كل 30 ثانية للحفاظ على دقة بيانات الجلسة.</p>
+      <div id="pl-social-section" class="pl-social-section" style="display:none;">
+        <p class="pl-social-title">تواصل معنا</p>
+        <div id="pl-social-links" class="pl-social-links"></div>
+      </div>
+
+      <p class="pl-footer-note">يتم تحديث بيانات الاتصال تلقائياً عبر البوابة دون إعادة تحميل الصفحة.</p>
+      <div class="rawad-powered-by" dir="ltr">Powered BY Hashim Hasanen</div>
     </section>
   </main>
 
   <script>
+    window.RAWAD_PORTAL_CONFIG = {
+      supabaseUrl: "https://efqsmehqnhuzohzjztni.supabase.co",
+      supabasePublishableKey: "sb_publishable_M-MV6rjrnG2jPpi-8ISVOA_X4O8Cvoq",
+      mac: "$(mac)"
+    };
+  </script>
+  <script>
     (function () {
+      var cfg = window.RAWAD_PORTAL_CONFIG || {};
       var rawRemaining = "$(if session-time-left)$(session-time-left)$(endif)".trim();
       var rawUptime = "$(uptime)".trim();
       var currentMac = "$(mac)".trim().toUpperCase();
@@ -297,6 +310,10 @@
       var cardConnStateEl = document.getElementById("pl-card-conn-state");
       var cardRemainingEl = document.getElementById("pl-card-remaining");
       var cardUptimeEl = document.getElementById("pl-card-uptime");
+      var titleEl = document.getElementById("pl-title");
+      var subtitleEl = document.getElementById("pl-subtitle");
+      var socialSectionEl = document.getElementById("pl-social-section");
+      var socialLinksEl = document.getElementById("pl-social-links");
 
       var CIRCUMFERENCE = 2 * Math.PI * 96; // 603.1857...
       if (progressEl) {
@@ -308,14 +325,12 @@
         var s = str.trim().toLowerCase();
         if (!s) return null;
 
-        // Match HH:MM:SS or MM:SS
         if (/^\d{1,3}:\d{2}(:\d{2})?$/.test(s)) {
           var parts = s.split(":").map(Number);
           if (parts.length === 2) return parts[0] * 60 + parts[1];
           if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
         }
 
-        // Match MikroTik format e.g. 1w2d3h4m5s
         var total = 0;
         var matched = false;
         var re = /(\d+)\s*(w|d|h|m|s)/g;
@@ -350,90 +365,242 @@
         return mm + ":" + ss;
       }
 
-      var remSec = parseDuration(rawRemaining);
+      function safeHttpUrl(raw) {
+        try {
+          var u = new URL(String(raw || "").trim());
+          return (u.protocol === "https:" || u.protocol === "http:") ? u.toString() : null;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      function renderSocialChannels(s) {
+        if (!s || !socialLinksEl || !socialSectionEl) return;
+        while (socialLinksEl.firstChild) socialLinksEl.removeChild(socialLinksEl.firstChild);
+
+        var items = [
+          { enabled: s.instagram_enabled, url: s.instagram_url, label: "إنستغرام" },
+          { enabled: s.facebook_enabled, url: s.facebook_url, label: "فيسبوك" },
+          { enabled: s.tiktok_enabled, url: s.tiktok_url, label: "تيك توك" },
+          { enabled: s.whatsapp_enabled, url: s.whatsapp_url, label: "واتساب" }
+        ];
+
+        var renderedCount = 0;
+        items.forEach(function (item) {
+          if (!item.enabled || !item.url) return;
+          var validHref = safeHttpUrl(item.url);
+          if (!validHref) return;
+          var a = document.createElement("a");
+          a.className = "pl-social-btn";
+          a.href = validHref;
+          a.target = "_blank";
+          a.rel = "noopener noreferrer";
+          a.textContent = item.label;
+          socialLinksEl.appendChild(a);
+          renderedCount++;
+        });
+
+        if (s.phone_enabled && s.phone_number) {
+          var rawPhone = String(s.phone_number).trim();
+          var telDigits = rawPhone.replace(/[^\d+]/g, "");
+          if (telDigits.length >= 3) {
+            var phoneA = document.createElement("a");
+            phoneA.className = "pl-social-btn pl-social-btn--phone";
+            phoneA.href = "tel:" + telDigits;
+            phoneA.dir = "ltr";
+            phoneA.textContent = rawPhone;
+            socialLinksEl.appendChild(phoneA);
+            renderedCount++;
+          }
+        }
+
+        socialSectionEl.style.display = renderedCount > 0 ? "block" : "none";
+      }
+
+      (function loadPortalBranding() {
+        if (!cfg.supabaseUrl || !cfg.supabasePublishableKey) return;
+        fetch(cfg.supabaseUrl + "/functions/v1/portal-auth", {
+          method: "GET",
+          headers: { "apikey": cfg.supabasePublishableKey }
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            var s = data && data.settings;
+            if (!s) return;
+            if (titleEl && s.welcome_title) titleEl.textContent = s.welcome_title;
+            if (subtitleEl && s.welcome_subtitle) subtitleEl.textContent = s.welcome_subtitle;
+            renderSocialChannels(s);
+          })
+          .catch(function () {});
+      })();
+
+      var saved = null;
+      try {
+        var savedRaw = sessionStorage.getItem("rawad_session_quota");
+        if (savedRaw) {
+          var parsedSaved = JSON.parse(savedRaw);
+          var savedMac = (parsedSaved && parsedSaved.mac ? String(parsedSaved.mac).trim().toUpperCase() : "");
+          var macMatches = !savedMac || !currentMac || currentMac.indexOf("$(") !== -1 || savedMac === currentMac;
+          if (macMatches && parsedSaved) saved = parsedSaved;
+        }
+      } catch (e) {}
+
+      var isUnlimited = !!(saved && saved.isUnlimited);
+      var statusToken = (saved && saved.statusToken) ? String(saved.statusToken) : "";
+      var remSec = isUnlimited ? null : parseDuration(rawRemaining);
       var upSec = parseDuration(rawUptime);
       var expiresAtMs = null;
-      var storedTotalSec = null;
+      var storedTotalSec = (saved && typeof saved.totalSeconds === "number" && isFinite(saved.totalSeconds) && saved.totalSeconds > 0)
+        ? saved.totalSeconds
+        : null;
+      var totalSec = Math.max(storedTotalSec || 0, 1);
 
-      if (remSec === null) {
+      if (!isUnlimited && remSec === null && saved && typeof saved.expiresAtMs === "number" && isFinite(saved.expiresAtMs)) {
+        expiresAtMs = saved.expiresAtMs;
+        remSec = Math.max(0, Math.floor((expiresAtMs - Date.now()) / 1000));
+      }
+      if (remSec !== null) {
+        totalSec = Math.max(totalSec, remSec + (upSec !== null ? upSec : 0), 1);
+      }
+
+      function showEndedState(msgText) {
+        isUnlimited = false;
+        remSec = 0;
+        expiresAtMs = null;
+        if (progressEl) progressEl.style.strokeDashoffset = CIRCUMFERENCE.toFixed(2);
+        if (ringWrap) {
+          ringWrap.classList.remove("is-low");
+          ringWrap.classList.add("is-expired");
+        }
+        if (statusPillEl) {
+          statusPillEl.classList.remove("pl-status-pill--warn");
+          statusPillEl.classList.add("pl-status-pill--expired");
+        }
+        if (statusPillTextEl) statusPillTextEl.textContent = "انتهت مدة الجلسة";
+        if (timerLabelEl) timerLabelEl.textContent = "حالة الجلسة";
+        if (timerValueEl) {
+          timerValueEl.classList.remove("pl-timer-value--unlimited");
+          timerValueEl.textContent = "00:00";
+        }
+        if (timerStateEl) timerStateEl.textContent = "الجلسة منتهية";
+        if (cardConnStateEl) cardConnStateEl.textContent = "منتهية الصلاحية";
+        if (cardRemainingEl) cardRemainingEl.textContent = "00:00";
+        if (timerNoteEl) {
+          timerNoteEl.textContent = msgText || "انتهت مدة جلستك الحالية أو تم تعطيلها.";
+          if (linkLogin && linkLogin.indexOf("$(") === -1) {
+            var backLink = document.createElement("a");
+            backLink.href = linkLogin;
+            backLink.style.color = "#0284c7";
+            backLink.style.fontWeight = "700";
+            backLink.style.marginRight = "8px";
+            backLink.textContent = "العودة لصفحة الدخول";
+            timerNoteEl.appendChild(backLink);
+          }
+        }
+      }
+
+      function applyUnlimitedState() {
+        isUnlimited = true;
+        remSec = null;
+        expiresAtMs = null;
+        if (ringWrap) ringWrap.classList.remove("is-low", "is-expired");
+        if (statusPillEl) statusPillEl.classList.remove("pl-status-pill--warn", "pl-status-pill--expired");
+        if (statusPillTextEl) statusPillTextEl.textContent = "متصل بالإنترنت (مفتوح)";
+        if (progressEl) progressEl.style.strokeDashoffset = "0";
+        if (timerLabelEl) timerLabelEl.textContent = "رصيد الحساب";
+        if (timerValueEl) {
+          timerValueEl.classList.add("pl-timer-value--unlimited");
+          timerValueEl.textContent = "غير محدود";
+        }
+        if (timerStateEl) timerStateEl.textContent = "حساب مفتوح نشط";
+        if (cardConnStateEl) cardConnStateEl.textContent = "متصل ونشط";
+        if (cardRemainingEl) cardRemainingEl.textContent = "الإنترنت متاح دون حد زمني";
+        if (timerNoteEl) timerNoteEl.textContent = "الإنترنت متاح دون حد زمني.";
+      }
+
+      function renderCountdown() {
+        if (isUnlimited) {
+          applyUnlimitedState();
+          if (upSec !== null && cardUptimeEl) cardUptimeEl.textContent = formatClock(upSec);
+          return;
+        }
+        if (remSec === null) return;
+        var ratio = totalSec > 0 ? Math.max(0, Math.min(1, remSec / totalSec)) : 0;
+        var offset = CIRCUMFERENCE * (1 - ratio);
+        if (progressEl) progressEl.style.strokeDashoffset = offset.toFixed(2);
+        if (timerValueEl) {
+          timerValueEl.classList.remove("pl-timer-value--unlimited");
+          timerValueEl.textContent = formatClock(remSec);
+        }
+        if (cardRemainingEl) cardRemainingEl.textContent = formatClock(remSec);
+        if (upSec !== null && cardUptimeEl) cardUptimeEl.textContent = formatClock(upSec);
+
+        if (remSec <= 0) {
+          showEndedState();
+        } else if (remSec <= 300) {
+          if (ringWrap) { ringWrap.classList.remove("is-expired"); ringWrap.classList.add("is-low"); }
+          if (statusPillEl) { statusPillEl.classList.remove("pl-status-pill--expired"); statusPillEl.classList.add("pl-status-pill--warn"); }
+          if (statusPillTextEl) statusPillTextEl.textContent = "الوقت المتبقي منخفض";
+          if (timerStateEl) timerStateEl.textContent = "أقل من 5 دقائق";
+        } else {
+          if (ringWrap) ringWrap.classList.remove("is-low", "is-expired");
+          if (statusPillEl) statusPillEl.classList.remove("pl-status-pill--warn", "pl-status-pill--expired");
+          if (statusPillTextEl) statusPillTextEl.textContent = "متصل بالإنترنت";
+          if (timerStateEl) timerStateEl.textContent = "جلسة نشطة";
+          if (timerNoteEl) timerNoteEl.textContent = "يتم تحديث عداد الوقت تلقائياً وفق رصيد الجلسة الفعلي.";
+        }
+      }
+
+      async function syncSessionFromServer() {
+        if (!statusToken || !cfg.supabaseUrl || !cfg.supabasePublishableKey) return;
         try {
-          var savedRaw = sessionStorage.getItem("rawad_session_quota");
-          if (savedRaw) {
-            var saved = JSON.parse(savedRaw);
-            var savedMac = (saved && saved.mac ? String(saved.mac).trim().toUpperCase() : "");
-            var macMatches = !savedMac || !currentMac || currentMac.indexOf("$(") !== -1 || savedMac === currentMac;
-            if (macMatches && saved && typeof saved.expiresAtMs === "number" && isFinite(saved.expiresAtMs)) {
-              expiresAtMs = saved.expiresAtMs;
-              remSec = Math.max(0, Math.floor((expiresAtMs - Date.now()) / 1000));
-              if (typeof saved.totalSeconds === "number" && isFinite(saved.totalSeconds) && saved.totalSeconds > 0) {
-                storedTotalSec = saved.totalSeconds;
-              }
-              if (timerNoteEl) {
-                timerNoteEl.textContent = "يتم تحديث عداد الوقت تلقائياً وفق رصيد الجلسة الفعلي.";
-              }
-            }
+          var payload = { action: "session_status", status_token: statusToken };
+          if (currentMac && currentMac.indexOf("$(") === -1) payload.mac = currentMac;
+          var res = await fetch(cfg.supabaseUrl + "/functions/v1/portal-auth", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "apikey": cfg.supabasePublishableKey
+            },
+            body: JSON.stringify(payload)
+          });
+          var data = await res.json().catch(function () { return null; });
+          if (!res.ok || !data || !data.ok) return;
+          if (!data.active) {
+            showEndedState(data.reason === "disabled" ? "تم تعطيل هذا الحساب من الإدارة." : "انتهت مدة جلستك الحالية.");
+            return;
+          }
+          if (data.is_unlimited) {
+            applyUnlimitedState();
+            return;
+          }
+          if (typeof data.remaining_seconds === "number" && isFinite(data.remaining_seconds)) {
+            isUnlimited = false;
+            remSec = Math.max(0, Math.floor(data.remaining_seconds));
+            expiresAtMs = Date.now() + remSec * 1000;
+            totalSec = Math.max(totalSec, remSec + (upSec !== null ? upSec : 0), 1);
+            renderCountdown();
           }
         } catch (e) {}
       }
 
-      if (remSec !== null) {
-        var totalSec = Math.max(
-          storedTotalSec || 0,
-          remSec + (upSec !== null ? upSec : 0),
-          1
-        );
-
-        var renderCountdown = function () {
-          var ratio = totalSec > 0 ? Math.max(0, Math.min(1, remSec / totalSec)) : 0;
-          var offset = CIRCUMFERENCE * (1 - ratio);
-          if (progressEl) {
-            progressEl.style.strokeDashoffset = offset.toFixed(2);
-          }
-
-          var formatted = formatClock(remSec);
-          if (timerValueEl) timerValueEl.textContent = formatted;
-          if (cardRemainingEl) cardRemainingEl.textContent = formatted;
-          if (upSec !== null && cardUptimeEl) {
-            cardUptimeEl.textContent = formatClock(upSec);
-          }
-
-          if (remSec <= 0) {
-            if (ringWrap) {
-              ringWrap.classList.remove("is-low");
-              ringWrap.classList.add("is-expired");
-            }
-            if (statusPillEl) {
-              statusPillEl.classList.remove("pl-status-pill--warn");
-              statusPillEl.classList.add("pl-status-pill--expired");
-            }
-            if (statusPillTextEl) statusPillTextEl.textContent = "انتهت مدة الجلسة";
-            if (timerLabelEl) timerLabelEl.textContent = "انتهى الرصيد المتاح";
-            if (timerStateEl) timerStateEl.textContent = "الجلسة منتهية";
-            if (cardConnStateEl) cardConnStateEl.textContent = "منتهية الصلاحية";
-            if (timerNoteEl) {
-              timerNoteEl.innerHTML = 'انتهت مدة جلستك الحالية. <a href="' + linkLogin + '" style="color:#0284c7;font-weight:700;">العودة لصفحة الدخول</a>';
-            }
-          } else if (remSec <= 300) {
-            if (ringWrap) {
-              ringWrap.classList.remove("is-expired");
-              ringWrap.classList.add("is-low");
-            }
-            if (statusPillEl) {
-              statusPillEl.classList.remove("pl-status-pill--expired");
-              statusPillEl.classList.add("pl-status-pill--warn");
-            }
-            if (statusPillTextEl) statusPillTextEl.textContent = "الوقت المتبقي منخفض";
-            if (timerStateEl) timerStateEl.textContent = "أقل من 5 دقائق";
-          } else {
-            if (ringWrap) ringWrap.classList.remove("is-low", "is-expired");
-            if (statusPillEl) statusPillEl.classList.remove("pl-status-pill--warn", "pl-status-pill--expired");
-            if (statusPillTextEl) statusPillTextEl.textContent = "متصل بالإنترنت";
-            if (timerStateEl) timerStateEl.textContent = "جلسة نشطة";
-          }
-        };
-
+      if (isUnlimited) {
+        applyUnlimitedState();
+      } else if (remSec !== null) {
         renderCountdown();
-        setInterval(function () {
+      } else if (progressEl) {
+        progressEl.style.strokeDashoffset = CIRCUMFERENCE.toFixed(2);
+      }
+
+      setInterval(function () {
+        if (isUnlimited) {
+          if (upSec !== null) {
+            upSec += 1;
+            if (cardUptimeEl) cardUptimeEl.textContent = formatClock(upSec);
+          }
+          return;
+        }
+        if (remSec !== null) {
           if (expiresAtMs !== null) {
             remSec = Math.max(0, Math.floor((expiresAtMs - Date.now()) / 1000));
           } else if (remSec > 0) {
@@ -441,18 +608,15 @@
           }
           if (upSec !== null && remSec > 0) upSec += 1;
           renderCountdown();
-        }, 1000);
-      } else {
-        // Do not substitute uptime or invent a countdown when $(session-time-left) is unavailable
-        if (progressEl) {
-          progressEl.style.strokeDashoffset = CIRCUMFERENCE.toFixed(2);
+        } else if (upSec !== null) {
+          upSec += 1;
+          if (cardUptimeEl) cardUptimeEl.textContent = formatClock(upSec);
         }
-        if (upSec !== null) {
-          setInterval(function () {
-            upSec += 1;
-            if (cardUptimeEl) cardUptimeEl.textContent = formatClock(upSec);
-          }, 1000);
-        }
+      }, 1000);
+
+      if (statusToken) {
+        syncSessionFromServer();
+        setInterval(syncSessionFromServer, 30000);
       }
     })();
   </script>

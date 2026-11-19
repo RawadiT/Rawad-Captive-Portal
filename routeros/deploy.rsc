@@ -236,12 +236,16 @@
   "    :local body (\$res->\"data\");\n" . \
   "    :if ([:pick \$body 0 6] = \"ALLOW:\") do={\n" . \
   "      :local remRaw [:pick \$body 6 [:len \$body]];\n" . \
-  "      :if (\$remRaw ~ \"^[0-9]+\\$\") do={\n" . \
-  "        :local remSec [:tonum \$remRaw];\n" . \
-  "        :if (\$remSec > 0) do={\n" . \
-  "          /ip firewall address-list add list=\"rawad-verified\" address=\$ipStr timeout=(\$remSec . \"s\") comment=\"rawad-guest-portal\";\n" . \
+  "      :if (\$remRaw = \"UNLIMITED\") do={\n" . \
+  "        /ip firewall address-list add list=\"rawad-verified\" address=\$ipStr comment=\"rawad-guest-portal\";\n" . \
+  "      } else={\n" . \
+  "        :if (\$remRaw ~ \"^[0-9]+\\$\") do={\n" . \
+  "          :local remSec [:tonum \$remRaw];\n" . \
+  "          :if (\$remSec > 0) do={\n" . \
+  "            /ip firewall address-list add list=\"rawad-verified\" address=\$ipStr timeout=(\$remSec . \"s\") comment=\"rawad-guest-portal\";\n" . \
+  "          } else={ /ip hotspot active remove [find where server=\"rawad-guest-hotspot\" && mac-address=\$macStr && address=\$ipStr]; }\n" . \
   "        } else={ /ip hotspot active remove [find where server=\"rawad-guest-hotspot\" && mac-address=\$macStr && address=\$ipStr]; }\n" . \
-  "      } else={ /ip hotspot active remove [find where server=\"rawad-guest-hotspot\" && mac-address=\$macStr && address=\$ipStr]; }\n" . \
+  "      }\n" . \
   "    } else={ /ip hotspot active remove [find where server=\"rawad-guest-hotspot\" && mac-address=\$macStr && address=\$ipStr]; }\n" . \
   "  } else={ /ip hotspot active remove [find where server=\"rawad-guest-hotspot\" && mac-address=\$macStr && address=\$ipStr]; }\n" . \
   "} on-error={\n" . \

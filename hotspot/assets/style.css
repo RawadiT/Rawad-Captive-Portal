@@ -1578,3 +1578,74 @@ body.portal-login-page {
     transition: none !important;
   }
 }
+
+/* Unified portal signature & customer status social links */
+.rawad-powered-by {
+  display: block;
+  width: fit-content;
+  margin: 14px auto 0;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.35px;
+  color: #1d4ed8;
+  background: rgba(239, 246, 255, 0.92);
+  border: 1px solid rgba(191, 219, 254, 0.85);
+}
+
+.pl-timer-value--unlimited {
+  font-size: 26px !important;
+  line-height: 1.3;
+  color: #059669;
+}
+
+.pl-social-section {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(203, 213, 225, 0.65);
+  text-align: center;
+}
+
+.pl-social-title {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+}
+
+.pl-social-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.pl-social-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
+  background: rgba(248, 250, 252, 0.95);
+  border: 1px solid rgba(191, 219, 254, 0.9);
+  text-decoration: none;
+  transition: transform 0.18s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.pl-social-btn:hover {
+  transform: translateY(-1px);
+  border-color: #3b82f6;
+  color: #1d4ed8;
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.12);
+}
+
+.pl-social-btn--phone {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #047857;
+}
+
