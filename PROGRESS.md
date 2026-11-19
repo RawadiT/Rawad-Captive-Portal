@@ -57,3 +57,28 @@
 - Configured `bridge-admin`/`veth-admin` (`172.18.0.2/24`), uploaded self-contained `admin/` to `/admin-www` mounted `mode=ro,noexec`, configured `memory-high=32.0MiB`, pulled `library/busybox:musl` running `httpd -f -p 8080 -h /www`, and verified staff HTTP `200` on all 6 assets with 0 console errors.
 - Verified HotSpot firewall isolation: `rawad-admin-block-guests` (`chain=forward in-interface=bridge dst-address=172.18.0.0/24 action=drop`) blocked authenticated guest traffic from `RAWAD-WIN10-CLIENT` (`9 packets / 468 bytes` dropped).
 - Recorded real lab metrics (pre `67.8MiB` HDD / `282.3MiB` free RAM -> post `64.8MiB` HDD / `274.9MiB` free RAM, container RAM `360–460KiB`, CPU `0%`, `write-sect-since-reboot=7696`) and documented in `DEPLOYMENT.md` alongside the official PG 17 3-file manual backup/restore guide and explicit warning that `RB4011 (ARM32/ARMv5)` container hosting remains unverified and not approved for production.
+
+
+## استعادة الوصول المزدوج للوحة الإدارة في مختبر CHR — 2026-11-20
+- **السبب الجذري المُثبت:**
+  1. خادم BusyBox `httpd` داخل الحاوية يستمع على `172.18.0.2:8080` وليس `8088`.
+  2. قاعدة NAT `rawad-admin-lab-staff` كانت محصورة في `in-interface=ether1 src-address=10.0.2.2` (لتوجيه VirtualBox NAT فقط إلى `127.0.0.1:8088` على Windows 11).
+  3. منفذ `ether3` (Adapter 3 Host-Only المضاف حديثاً) لم يكن يحمل عنوان IP في `192.168.56.0/24`، ولم تكن هناك قاعدة NAT له.
+  4. جهاز Windows 10 VM (`192.168.88.250`) على `bridge` كان محجوباً عن `172.18.0.0/24` بقاعدة `rawad-admin-block-guests`.
+- **أوامر RouterOS المُضافة على `Rawad-CHR-Lab` (دون فتح WAN ودون المساس بـ HotSpot أو الإنتاج):**
+  - `/ip address add address=192.168.56.2/24 interface=ether3 comment="rawad-admin-hostonly"`
+  - `/ip firewall nat add chain=dstnat in-interface=ether3 src-address=192.168.56.1 dst-address=192.168.56.2 protocol=tcp dst-port=8088 action=dst-nat to-addresses=172.18.0.2 to-ports=8080 comment="rawad-admin-hostonly-staff"`
+  - `/ip firewall nat add chain=dstnat in-interface=bridge src-address=192.168.88.250 dst-address=192.168.88.1 protocol=tcp dst-port=8088 action=dst-nat to-addresses=172.18.0.2 to-ports=8080 comment="rawad-admin-win10-lab"`
+  - `/ip firewall filter add chain=forward in-interface=bridge src-address=192.168.88.250 dst-address=172.18.0.2 protocol=tcp dst-port=8080 action=accept place-before=0 comment="rawad-admin-allow-win10-lab-out"`
+  - `/ip firewall filter add chain=forward in-interface=bridge-admin src-address=172.18.0.2 dst-address=192.168.88.250 protocol=tcp src-port=8080 action=accept place-before=0 comment="rawad-admin-allow-win10-lab-in"`
+  - `/ip firewall filter add chain=forward in-interface=ether3 src-address=!192.168.56.1 dst-address=172.18.0.0/24 action=drop comment="rawad-admin-block-hostonly-other"`
+- **عناوين الوصول النهائية الثابتة:**
+  - **Windows 11 Host:** `http://192.168.56.2:8088/` (عبر Host-Only `ether3`)، وكذلك `http://127.0.0.1:8088/` (عبر VirtualBox NAT loopback).
+  - **Windows 10 VM (`192.168.88.250`):** `http://192.168.88.1:8088/` (محصور بـ `192.168.88.250` فقط).
+- **نتائج الاختبار والتحقق (بما فيها ما بعد إعادة تشغيل CHR):**
+  - استجابة `HTTP 200` (`28520` بايت) وتحميل كامل ملفات `style.css` و`admin.js` و`logo.png` وخطوط `cairo-{arabic,latin}.woff2` بصفر أخطاء Console من Windows 11 وWindows 10 VM.
+  - إعادة تشغيل CHR: عادت الحاوية تلقائياً (`R - RUNNING`)، واستمر عمل `http://192.168.56.2:8088/` و`http://127.0.0.1:8088/` و`http://192.168.88.1:8088/` وبوابة `http://hotspot.rawad.test/login` و`portal-auth` (`HTTP 200`)، مع بقاء الحجب قائماً لـ WAN ولباقي ضيوف HotSpot.
+- **التراجع الآمن عن هذا الإصلاح على CHR:**
+  - `/ip firewall filter remove [find where comment~"rawad-admin-allow-win10-lab|rawad-admin-block-hostonly-other"]`
+  - `/ip firewall nat remove [find where comment~"rawad-admin-hostonly-staff|rawad-admin-win10-lab"]`
+  - `/ip address remove [find where comment="rawad-admin-hostonly"]`
