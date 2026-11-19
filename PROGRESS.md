@@ -40,3 +40,8 @@
 - Extended `supabase/functions/admin-api/index.ts` for unlimited accounts (`is_unlimited`), `GET/PUT /portal-settings` (`site_owner` & `general`, rejecting `javascript:`/`data:` schemes and invalid phones), and `GET /cleanup/summary` + `POST /cleanup/execute` (strictly `site_owner` ONLY, returning HTTP `403` to `general` and `subordinate`).
 - Extended `supabase/functions/portal-auth/index.ts` (`GET`/`POST portal_settings`, `session_status` authenticated with HMAC `status_token`, and unlimited user login responses) and `supabase/functions/verify-mac/index.ts` (`ALLOW:UNLIMITED`).
 - Deployed all 3 functions to `Rawad Test` (`efqsmehqnhuzohzjztni`) and passed live HTTP tests across role guards, `portal_settings` round-trip, unlimited account login/status/disable revocation, with temporary test accounts cleaned up afterwards.
+
+## Phase 3 Unified Light Daytime Admin Dashboard — 2026-11-19
+- Bundled self-contained `admin/assets/logo.png` and `admin/assets/fonts/cairo-{arabic,latin}.woff2` (zero external CDNs).
+- Redesigned `admin/index.html`, `admin/style.css`, and `admin/admin.js` in the unified light daytime Captive Portal aesthetic with `Powered BY Hashim Hasanen` footer, unlimited account toggle (`is_unlimited`), `Portal Settings` with live safe preview, and `site_owner`-only `Database Cleanup` panel.
+- Verified in Chromium (`chrome-devtools-mcp`) across Desktop (`1440x900`), Tablet (`820x1180`), and Mobile (`390x844`): 0 console errors, all local assets HTTP 200, Cairo RTL active, zero horizontal overflow, live preview & cleanup summary verified, temporary `__tmp_ui_owner` removed afterwards.

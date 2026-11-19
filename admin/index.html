@@ -3,49 +3,78 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f5f7fb">
+  <meta name="theme-color" content="#f5f9ff">
   <title>رواد التقنيات | إدارة الشبكة</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Ctext x='16' y='21' font-size='16' text-anchor='middle' fill='white' font-family='Arial'%3ER%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="ambient-background" aria-hidden="true"><span class="ambient-orb orb-one"></span><span class="ambient-orb orb-two"></span><span class="ambient-orb orb-three"></span><span class="ambient-symbol symbol-one">⌁</span><span class="ambient-symbol symbol-two">✧</span><span class="ambient-symbol symbol-three">◈</span><span class="ambient-symbol symbol-four">⌘</span></div>
+  <div class="ambient-background" aria-hidden="true">
+    <div class="bg-grid"></div>
+    <span class="ambient-orb orb-one"></span>
+    <span class="ambient-orb orb-two"></span>
+    <span class="ambient-orb orb-three"></span>
+  </div>
+
   <section id="login-section" class="login-shell">
-    <div class="login-brand">
-      <img class="brand-logo" src="../hotspot/assets/logo.png" alt="شعار رواد التقنيات">
-      <span>رواد التقنيات</span>
-    </div>
     <div class="login-card">
-      <div class="eyebrow">بوابة الإدارة</div>
-      <h1>مرحباً بعودتك</h1>
-      <p class="muted">سجّل الدخول لإدارة حسابات شبكة الإنترنت.</p>
+      <div class="login-brand-head">
+        <img class="brand-logo" src="assets/logo.png" alt="شعار رواد التقنيات">
+        <div>
+          <div class="eyebrow">لوحة الإدارة الموحدة</div>
+          <h1>مرحباً بعودتك</h1>
+        </div>
+      </div>
+      <p class="muted">سجّل الدخول لإدارة حسابات شبكة الإنترنت وإعدادات البوابة.</p>
       <div id="login-msg" class="notice hidden" role="alert"></div>
       <form id="admin-login-form">
-        <label for="adm-user">اسم المستخدم</label>
-        <input id="adm-user" name="username" autocomplete="username" required placeholder="أدخل اسم المستخدم">
-        <label for="adm-pass">كلمة المرور</label>
-        <input id="adm-pass" name="password" type="password" autocomplete="current-password" required placeholder="أدخل كلمة المرور">
+        <div class="field">
+          <label for="adm-user">اسم المستخدم</label>
+          <input id="adm-user" name="username" autocomplete="username" required placeholder="أدخل اسم المستخدم">
+        </div>
+        <div class="field">
+          <label for="adm-pass">كلمة المرور</label>
+          <div class="password-field">
+            <input id="adm-pass" name="password" type="password" autocomplete="current-password" required placeholder="أدخل كلمة المرور">
+            <button type="button" class="password-toggle" data-toggle-password="adm-pass">إظهار</button>
+          </div>
+        </div>
         <button class="btn btn-primary btn-wide" type="submit">تسجيل الدخول</button>
       </form>
-      <div class="login-foot">نظام إدارة نقاط الاتصال — رواد التقنيات</div>
+      <div class="login-foot">
+        <div>رواد التقنيات — وصول إداري من شبكة الشركة فقط</div>
+        <div class="powered-by" dir="ltr">Powered BY Hashim Hasanen</div>
+      </div>
     </div>
   </section>
 
   <div id="app-shell" class="app-shell hidden">
     <aside class="sidebar" id="sidebar">
       <div class="brand">
-        <img class="brand-logo" src="../hotspot/assets/logo.png" alt="شعار رواد التقنيات">
-        <div><strong>رواد التقنيات</strong><small>إدارة الشبكة</small></div>
+        <img class="brand-logo" src="assets/logo.png" alt="شعار رواد التقنيات">
+        <div>
+          <strong>رواد التقنيات</strong>
+          <small>إدارة شبكة الإنترنت</small>
+        </div>
       </div>
       <div class="side-label">القائمة الرئيسية</div>
-      <nav class="side-nav">
+      <nav class="side-nav" aria-label="التنقل الرئيسي">
         <button class="nav-link active" data-view="overview" data-manager-only><span class="nav-icon">▦</span> نظرة عامة</button>
         <button class="nav-link" data-view="users"><span class="nav-icon">♙</span> حسابات الإنترنت</button>
         <button class="nav-link" data-view="quotas" data-manager-only><span class="nav-icon">◷</span> الحصص المجانية</button>
+        <button class="nav-link" data-view="portal-settings" data-manager-only><span class="nav-icon">⚙</span> إعدادات البوابة</button>
         <button class="nav-link" data-view="admins" data-owner-only><span class="nav-icon">♧</span> إدارة المدراء</button>
+        <button class="nav-link" data-view="cleanup" data-owner-only><span class="nav-icon">🧹</span> تنظيف قاعدة البيانات</button>
         <button class="nav-link" data-view="password"><span class="nav-icon">⚿</span> كلمة المرور</button>
       </nav>
       <div class="sidebar-bottom">
-        <div class="admin-chip"><span class="avatar">م</span><div><strong id="admin-name">المدير</strong><small>مدير النظام</small></div></div>
+        <div class="admin-chip">
+          <span class="avatar">م</span>
+          <div>
+            <strong id="admin-name">المدير</strong>
+            <small id="admin-role-label">مدير النظام</small>
+          </div>
+        </div>
         <button id="btn-logout" class="logout-btn">تسجيل الخروج <span>↪</span></button>
       </div>
     </aside>
@@ -66,43 +95,169 @@
 
       <section id="view-overview" class="view">
         <div class="welcome-row">
-          <div><h2>ملخص الشبكة</h2><p class="muted">نظرة سريعة على حالة حسابات الإنترنت المسجلة.</p></div>
+          <div>
+            <h2>ملخص الشبكة</h2>
+            <p class="muted">نظرة سريعة على حالة حسابات الإنترنت المسجلة في النظام.</p>
+          </div>
           <button class="btn btn-primary" data-go="users">＋ إنشاء حساب</button>
         </div>
         <div class="stats-grid">
           <article class="stat-card"><div class="stat-top"><span>إجمالي الحسابات</span><b class="stat-icon blue">♙</b></div><strong id="stat-total">—</strong><small>جميع الحسابات المسجلة</small></article>
-          <article class="stat-card"><div class="stat-top"><span>حسابات نشطة</span><b class="stat-icon green">✓</b></div><strong id="stat-active">—</strong><small>بدأت مدة صلاحيتها ولم تنتهِ</small></article>
-          <article class="stat-card"><div class="stat-top"><span>بانتظار أول دخول</span><b class="stat-icon amber">◷</b></div><strong id="stat-pending">—</strong><small>لم تبدأ مدة الاستخدام بعد</small></article>
+          <article class="stat-card"><div class="stat-top"><span>حسابات نشطة / مفتوحة</span><b class="stat-icon green">✓</b></div><strong id="stat-active">—</strong><small>فعالة حالياً على الشبكة</small></article>
+          <article class="stat-card"><div class="stat-top"><span>بانتظار أول دخول</span><b class="stat-icon amber">◷</b></div><strong id="stat-pending">—</strong><small>لم يبدأ احتساب الوقت بعد</small></article>
           <article class="stat-card"><div class="stat-top"><span>حسابات معطلة</span><b class="stat-icon red">⊘</b></div><strong id="stat-disabled">—</strong><small>تم إيقافها من الإدارة</small></article>
         </div>
         <section class="panel">
-          <div class="panel-heading"><div><h2>أحدث الحسابات</h2><p class="muted">آخر الحسابات التي أُضيفت إلى النظام</p></div><button class="text-btn" data-go="users">عرض جميع الحسابات ←</button></div>
-          <div class="table-wrap"><table><thead><tr><th>اسم المستخدم</th><th>المدة</th><th>الحالة</th><th>تاريخ الإنشاء</th></tr></thead><tbody id="recent-users"><tr><td colspan="4" class="empty">جارٍ تحميل البيانات...</td></tr></tbody></table></div>
+          <div class="panel-heading">
+            <div><h2>أحدث الحسابات</h2><p class="muted">آخر الحسابات التي أُضيفت إلى النظام</p></div>
+            <button class="text-btn" data-go="users">عرض جميع الحسابات ←</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>اسم المستخدم</th><th>المدة / النوع</th><th>الحالة</th><th>تاريخ الإنشاء</th></tr></thead>
+              <tbody id="recent-users"><tr><td colspan="4" class="empty">جارٍ تحميل البيانات...</td></tr></tbody>
+            </table>
+          </div>
         </section>
       </section>
 
       <section id="view-users" class="view hidden">
-        <div class="welcome-row"><div><h2>حسابات الإنترنت</h2><p class="muted">إنشاء الحسابات وإدارة مددها وحالاتها.</p></div></div>
+        <div class="welcome-row">
+          <div><h2>حسابات الإنترنت</h2><p class="muted">إنشاء الحسابات المحدودة والمفتوحة وإدارة مددها وحالاتها.</p></div>
+        </div>
         <section class="panel create-panel">
-          <div class="panel-heading"><div><h2>إنشاء حساب جديد</h2><p class="muted">تبدأ مدة الحساب عند أول تسجيل دخول ناجح.</p></div><span class="panel-symbol">＋</span></div>
-          <form id="create-user-form" class="create-grid">
+          <div class="panel-heading">
+            <div><h2>إنشاء حساب جديد</h2><p class="muted">للحسابات المحدودة تبدأ المدة عند أول دخول، وللحسابات المفتوحة يبقى الاتصال متاحاً حتى التعطيل أو الحذف.</p></div>
+            <span class="panel-symbol">＋</span>
+          </div>
+          <form id="create-user-form" class="create-grid create-grid-users">
             <div class="field"><label for="new-username">اسم المستخدم</label><input id="new-username" required autocomplete="off" placeholder="مثال: user100"></div>
             <div class="field"><label for="new-password">كلمة المرور</label><div class="password-field"><input id="new-password" type="password" minlength="6" required placeholder="6 أحرف على الأقل"><button type="button" class="password-toggle" data-toggle-password="new-password">إظهار</button></div></div>
             <div class="field"><label for="new-duration">مدة الصلاحية بالدقائق</label><input id="new-duration" type="number" min="1" value="180" required></div>
+            <div class="field field-checkbox">
+              <label class="toggle-chip" for="create-unlimited">
+                <input id="create-unlimited" type="checkbox">
+                <span>حساب مفتوح (غير محدود)</span>
+              </label>
+            </div>
             <button type="submit" class="btn btn-primary create-submit">إنشاء الحساب</button>
           </form>
         </section>
         <section class="panel">
-          <div class="panel-heading list-heading"><div><h2>جميع الحسابات</h2><p class="muted"><span id="users-count">0</span> حساب مسجل</p></div><div class="filters"><input id="users-search" class="search-input" type="search" placeholder="ابحث باسم المستخدم..."><select id="users-filter" aria-label="تصفية حسب الحالة"><option value="all">كل الحالات</option><option value="active">نشط</option><option value="pending">لم يبدأ</option><option value="expired">منتهي</option><option value="disabled">معطل</option></select></div></div>
-          <div class="table-wrap"><table><thead><tr><th>الحساب</th><th>المدة</th><th>الوقت المتبقي</th><th>الحالة</th><th>أول دخول</th><th>تاريخ الانتهاء</th><th>الإجراءات</th></tr></thead><tbody id="users-tbody"><tr><td colspan="7" class="empty">جارٍ تحميل البيانات...</td></tr></tbody></table></div>
+          <div class="panel-heading list-heading">
+            <div><h2>جميع الحسابات</h2><p class="muted"><span id="users-count">0</span> حساب مسجل</p></div>
+            <div class="filters">
+              <input id="users-search" class="search-input" type="search" placeholder="ابحث باسم المستخدم...">
+              <select id="users-filter" aria-label="تصفية حسب الحالة">
+                <option value="all">كل الحالات</option>
+                <option value="active">نشط</option>
+                <option value="unlimited">مفتوح</option>
+                <option value="pending">لم يبدأ</option>
+                <option value="expired">منتهي</option>
+                <option value="disabled">معطل</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>الحساب</th><th>المدة</th><th>الوقت المتبقي</th><th>الحالة</th><th>أول دخول</th><th>تاريخ الانتهاء</th><th>الإجراءات</th></tr></thead>
+              <tbody id="users-tbody"><tr><td colspan="7" class="empty">جارٍ تحميل البيانات...</td></tr></tbody>
+            </table>
+          </div>
           <div id="users-empty" class="empty hidden">لا توجد حسابات تطابق البحث.</div>
         </section>
       </section>
 
+      <section id="view-quotas" class="view hidden" data-manager-only>
+        <div class="welcome-row">
+          <div><h2>الحصص المجانية</h2><p class="muted">حصة مجانية واحدة (30 دقيقة) لكل جهاز يومياً بتوقيت بغداد Asia/Baghdad.</p></div>
+        </div>
+        <section class="panel">
+          <div class="panel-heading"><div><h2>سجل الحصص</h2><p class="muted">يعرض النظام آخر 200 سجل متاح.</p></div></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>عنوان MAC</th><th>تاريخ الحصة</th><th>بداية الاستخدام</th><th>انتهاء الحصة</th><th>تاريخ التسجيل</th></tr></thead>
+              <tbody id="quotas-tbody"><tr><td colspan="5" class="empty">جارٍ تحميل البيانات...</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section id="view-portal-settings" class="view hidden" data-manager-only>
+        <div class="welcome-row">
+          <div><h2>إعدادات بوابة العملاء</h2><p class="muted">تخصيص نصوص الترحيب وروابط التواصل الاجتماعي ورقم الهاتف الظاهرة في بوابة الدخول وصفحة الحالة.</p></div>
+        </div>
+        <div class="settings-layout">
+          <section class="panel">
+            <div class="panel-heading"><div><h2>محتوى البوابة وروابط التواصل</h2><p class="muted">تُحفظ التغييرات فوراً وتظهر في صفحة الدخول وصفحة حالة الاتصال.</p></div></div>
+            <form id="portal-settings-form" class="settings-form">
+              <div class="settings-group">
+                <div class="field"><label for="ps-site-title">اسم الشبكة / العنوان العلوي</label><input id="ps-site-title" maxlength="80" required></div>
+                <div class="field"><label for="ps-welcome-title">عنوان الترحيب الرئيسي</label><input id="ps-welcome-title" maxlength="120" required></div>
+                <div class="field"><label for="ps-welcome-subtitle">النص الترحيبي الفرعي</label><textarea id="ps-welcome-subtitle" rows="2" maxlength="240"></textarea></div>
+                <div class="field"><label for="ps-free-notice">ملاحظة الحصة المجانية</label><input id="ps-free-notice" maxlength="200"></div>
+              </div>
+
+              <div class="settings-divider">قنوات التواصل والدعم (تظهر فقط عند تفعيلها)</div>
+
+              <div class="channel-row">
+                <label class="toggle-chip"><input id="ps-instagram-enabled" type="checkbox"> <span>إنستغرام (Instagram)</span></label>
+                <input id="ps-instagram-url" type="url" dir="ltr" placeholder="https://instagram.com/...">
+              </div>
+              <div class="channel-row">
+                <label class="toggle-chip"><input id="ps-facebook-enabled" type="checkbox"> <span>فيسبوك (Facebook)</span></label>
+                <input id="ps-facebook-url" type="url" dir="ltr" placeholder="https://facebook.com/...">
+              </div>
+              <div class="channel-row">
+                <label class="toggle-chip"><input id="ps-tiktok-enabled" type="checkbox"> <span>تيك توك (TikTok)</span></label>
+                <input id="ps-tiktok-url" type="url" dir="ltr" placeholder="https://tiktok.com/@...">
+              </div>
+              <div class="channel-row">
+                <label class="toggle-chip"><input id="ps-whatsapp-enabled" type="checkbox"> <span>واتساب (WhatsApp)</span></label>
+                <input id="ps-whatsapp-url" type="url" dir="ltr" placeholder="https://wa.me/964...">
+              </div>
+              <div class="channel-row">
+                <label class="toggle-chip"><input id="ps-phone-enabled" type="checkbox"> <span>هاتف الاتصال (tel:)</span></label>
+                <input id="ps-phone-number" type="text" dir="ltr" placeholder="+964 770 000 0000" maxlength="32">
+              </div>
+
+              <div class="settings-actions">
+                <button type="submit" id="ps-save-btn" class="btn btn-primary">حفظ إعدادات البوابة</button>
+                <button type="button" id="ps-reload-btn" class="btn btn-light">إعادة تحميل القيم المحفوظة</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="panel preview-panel">
+            <div class="panel-heading"><div><h2>معاينة حيّة لبوابة العميل</h2><p class="muted">تتحدث المعاينة تلقائياً أثناء تعديل النصوص والروابط.</p></div></div>
+            <div class="preview-stage">
+              <div class="preview-card">
+                <img class="preview-logo" src="assets/logo.png" alt="معاينة الشعار">
+                <span id="prev-site-title" class="preview-badge">شبكة رواد</span>
+                <h3 id="prev-welcome-title">أهلاً بك في شبكة رواد</h3>
+                <p id="prev-welcome-subtitle" class="preview-sub">استمتع بإنترنت فائق السرعة عبر بوابة الدخول الموحدة</p>
+                <div id="prev-free-notice" class="preview-notice">يحق لكل جهاز 30 دقيقة مجانية يومياً</div>
+                <div class="preview-mock-actions">
+                  <span class="mock-btn mock-btn-primary">دخول مجاني (30 دقيقة)</span>
+                  <span class="mock-btn mock-btn-secondary">دخول المشتركين</span>
+                </div>
+                <div id="prev-links-wrap" class="preview-links-wrap hidden">
+                  <div class="preview-links-label">تواصل معنا</div>
+                  <div id="prev-links-list" class="preview-links-list"></div>
+                </div>
+                <div class="powered-by preview-powered" dir="ltr">Powered BY Hashim Hasanen</div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+
       <section id="view-admins" class="view hidden" data-owner-only>
-        <div class="welcome-row"><div><h2>حسابات المدراء</h2><p class="muted">إنشاء وإدارة حسابات الوصول إلى لوحة التحكم. المدير الأساسي محمي ولا يظهر ضمن الحسابات القابلة للحذف.</p></div></div>
+        <div class="welcome-row">
+          <div><h2>حسابات المدراء</h2><p class="muted">إنشاء وإدارة حسابات الوصول إلى لوحة التحكم. حساب مدير الموقع محمي من الحذف والتعديل.</p></div>
+        </div>
         <section class="panel create-panel">
-          <div class="panel-heading"><div><h2>إنشاء مدير فرعي</h2><p class="muted">المدير الفرعي يستطيع إنشاء حسابات إنترنت وتغيير كلمة مروره فقط.</p></div></div>
+          <div class="panel-heading"><div><h2>إنشاء حساب مدير</h2><p class="muted">المدير الفرعي يدير حسابات الإنترنت وكلمة مروره فقط، والمدير العام يدير الإعدادات والحصص وتعديل الحسابات.</p></div></div>
           <form id="create-admin-form" class="create-grid">
             <div class="field"><label for="new-admin-username">اسم المستخدم</label><input id="new-admin-username" required autocomplete="off"></div>
             <div class="field"><label for="new-admin-password">كلمة المرور</label><div class="password-field"><input id="new-admin-password" type="password" minlength="6" required autocomplete="new-password"><button type="button" class="password-toggle" data-toggle-password="new-admin-password">إظهار</button></div></div>
@@ -112,7 +267,38 @@
         </section>
         <section class="panel">
           <div class="panel-heading"><div><h2>المدراء المسجلون</h2><p class="muted"><span id="admins-count">0</span> حساب إداري</p></div></div>
-          <div class="table-wrap"><table><thead><tr><th>اسم المستخدم</th><th>نوع الصلاحية</th><th>تاريخ الإنشاء</th><th>الإجراءات</th></tr></thead><tbody id="admins-tbody"><tr><td colspan="4" class="empty">جارٍ تحميل البيانات...</td></tr></tbody></table></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>اسم المستخدم</th><th>نوع الصلاحية</th><th>تاريخ الإنشاء</th><th>الإجراءات</th></tr></thead>
+              <tbody id="admins-tbody"><tr><td colspan="4" class="empty">جارٍ تحميل البيانات...</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section id="view-cleanup" class="view hidden" data-owner-only>
+        <div class="welcome-row">
+          <div><h2>تنظيف قاعدة البيانات</h2><p class="muted">صلاحية حصرية لحساب مدير الموقع فقط (<span dir="ltr">site_owner</span>) — السياسة المعتمدة: الخيار (ب).</p></div>
+          <button type="button" id="btn-cleanup-refresh" class="btn btn-light">↻ تحديث الإحصائيات</button>
+        </div>
+        <div class="stats-grid">
+          <article class="stat-card"><div class="stat-top"><span>حصص أيام سابقة للحذف</span><b class="stat-icon amber">◷</b></div><strong id="cl-past-quotas">—</strong><small>منتهية قبل تاريخ بغداد الحالي</small></article>
+          <article class="stat-card"><div class="stat-top"><span>حصص اليوم المحفوظة</span><b class="stat-icon green">✓</b></div><strong id="cl-today-quotas">—</strong><small>تاريخ بغداد: <span id="cl-baghdad-date">—</span></small></article>
+          <article class="stat-card"><div class="stat-top"><span>جلسات منتهية للحذف</span><b class="stat-icon red">⊘</b></div><strong id="cl-ended-sessions">—</strong><small>منتهية/مفصولة ومؤكدة السحب</small></article>
+          <article class="stat-card"><div class="stat-top"><span>البيانات المحمية</span><b class="stat-icon blue">🛡</b></div><strong id="cl-preserved-accounts">—</strong><small id="cl-preserved-detail">حسابات المستخدمين والمدراء محفوظة</small></article>
+        </div>
+        <section class="panel cleanup-panel">
+          <div class="panel-heading">
+            <div><h2>سياسة التنظيف الآمن</h2><p class="muted">لا يؤثر التنظيف على حصص اليوم الحالي أو الجلسات النشطة أو الحسابات.</p></div>
+          </div>
+          <ul class="policy-list">
+            <li>يُحذف فقط ما انتهى من سجلات <code>free_quotas</code> للأيام السابقة، وتبقى سجلات اليوم الحالي بتوقيت <code>Asia/Baghdad</code> لمنع تكرار الحصة المجانية في نفس اليوم.</li>
+            <li>تُحذف فقط سجلات <code>sessions</code> المنتهية أو المفصولة التي لا تنتظر إقرار سحب من الراوتر.</li>
+            <li>تبقى جميع حسابات المشتركين (<code>users</code>)، وجميع حسابات المدراء (<code>admins</code>)، وإعدادات البوابة (<code>portal_settings</code>)، والجلسات النشطة محفوظة بالكامل.</li>
+          </ul>
+          <div class="cleanup-actions">
+            <button type="button" id="btn-cleanup-execute" class="btn btn-danger">تنفيذ تنظيف البيانات التشغيلية</button>
+          </div>
         </section>
       </section>
 
@@ -129,20 +315,17 @@
         </section>
       </section>
 
-      <section id="view-quotas" class="view hidden" data-manager-only>
-        <div class="welcome-row"><div><h2>الحصص المجانية</h2><p class="muted">سجل استخدام الإنترنت المجاني حسب عنوان MAC وتاريخ الحصة.</p></div></div>
-        <section class="panel"><div class="panel-heading"><div><h2>سجل الحصص</h2><p class="muted">يعرض النظام آخر 200 سجل متاح.</p></div></div>
-          <div class="table-wrap"><table><thead><tr><th>عنوان MAC</th><th>تاريخ الحصة</th><th>بداية الاستخدام</th><th>انتهاء الحصة</th><th>تاريخ التسجيل</th></tr></thead><tbody id="quotas-tbody"><tr><td colspan="5" class="empty">جارٍ تحميل البيانات...</td></tr></tbody></table></div>
-        </section>
-      </section>
-      <footer class="footer">رواد التقنيات <span>•</span> نظام إدارة شبكة الإنترنت</footer>
+      <footer class="footer">
+        <span>رواد التقنيات • نظام إدارة شبكة الإنترنت</span>
+        <span class="powered-by" dir="ltr">Powered BY Hashim Hasanen</span>
+      </footer>
     </main>
   </div>
 
   <div id="edit-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">
     <section class="modal-card">
       <div class="modal-heading">
-        <div><span class="eyebrow">إدارة الحساب</span><h2 id="edit-modal-title">تعديل بيانات الحساب</h2><p class="muted">يمكنك تحديث اسم المستخدم وكلمة المرور ومدة الصلاحية.</p></div>
+        <div><span class="eyebrow">إدارة الحساب</span><h2 id="edit-modal-title">تعديل بيانات الحساب</h2><p class="muted">يمكنك تحديث اسم المستخدم، كلمة المرور، أو تفعيل الحساب المفتوح.</p></div>
         <button type="button" id="edit-modal-close" class="modal-close" aria-label="إغلاق">×</button>
       </div>
       <div id="edit-modal-msg" class="notice hidden" role="alert"></div>
@@ -151,6 +334,10 @@
         <div class="modal-fields">
           <div class="field"><label for="edit-username">اسم المستخدم</label><input id="edit-username" required autocomplete="off"></div>
           <div class="field"><label for="edit-password">كلمة المرور الجديدة</label><div class="password-field"><input id="edit-password" type="password" minlength="6" autocomplete="new-password" placeholder="اتركها فارغة دون تغيير"><button type="button" class="password-toggle" data-toggle-password="edit-password">إظهار</button></div></div>
+          <label class="toggle-chip" for="edit-unlimited">
+            <input id="edit-unlimited" type="checkbox">
+            <span>حساب مفتوح (غير محدود — دون حد زمني)</span>
+          </label>
           <div class="field"><label for="edit-duration">مدة الصلاحية بالدقائق</label><input id="edit-duration" type="number" min="1" required></div>
         </div>
         <div class="modal-actions">
@@ -163,7 +350,7 @@
 
   <div id="admin-edit-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="admin-edit-title">
     <section class="modal-card">
-      <div class="modal-heading"><div><span class="eyebrow">إدارة المدراء</span><h2 id="admin-edit-title">تعديل حساب المدير</h2><p class="muted">يمكن تغيير اسم المستخدم أو تعيين كلمة مرور جديدة.</p></div><button type="button" id="admin-edit-close" class="modal-close">×</button></div>
+      <div class="modal-heading"><div><span class="eyebrow">إدارة المدراء</span><h2 id="admin-edit-title">تعديل حساب المدير</h2><p class="muted">يمكن تغيير اسم المستخدم أو نوع الصلاحية أو تعيين كلمة مرور جديدة.</p></div><button type="button" id="admin-edit-close" class="modal-close" aria-label="إغلاق">×</button></div>
       <div id="admin-edit-msg" class="notice hidden" role="alert"></div>
       <form id="admin-edit-form">
         <input type="hidden" id="admin-edit-id">
@@ -177,7 +364,7 @@
     </section>
   </div>
 
-  <div id="confirm-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+  <div id="confirm-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
     <section class="modal-card confirm-card"><h2 id="confirm-title">تأكيد العملية</h2><p id="confirm-text" class="muted"></p><div class="modal-actions"><button type="button" id="confirm-cancel" class="btn btn-light">إلغاء</button><button type="button" id="confirm-accept" class="btn btn-danger">تأكيد</button></div></section>
   </div>
 
