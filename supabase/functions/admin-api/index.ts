@@ -4,7 +4,7 @@ import { hashPassword, signAdminToken, verifyAdminToken, verifyPassword } from '
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
 };
 
 function json(data: unknown, status = 200): Response {
@@ -15,21 +15,34 @@ function json(data: unknown, status = 200): Response {
 }
 
 function toPublicUser(u: {
-  id: string; username: string; duration_minutes: number; started_at: string | null;
-  expires_at: string | null; is_disabled: boolean; created_at: string;
+  id: string; username: string; duration_minutes: number | null; is_unlimited?: boolean;
+  started_at: string | null; expires_at: string | null; is_disabled: boolean; created_at: string;
 }) {
+  const isUnlimited = Boolean(u.is_unlimited);
   const nowMs = Date.now();
-  let remainingSeconds = u.duration_minutes * 60;
+  let remainingSeconds: number | null = isUnlimited ? null : (u.duration_minutes ?? 0) * 60;
   let isExpired = false;
-  if (u.expires_at) {
+  if (!isUnlimited && u.expires_at) {
     remainingSeconds = Math.max(0, Math.floor((Date.parse(u.expires_at) - nowMs) / 1000));
     isExpired = remainingSeconds === 0;
   }
   return {
-    id: u.id, username: u.username, duration_minutes: u.duration_minutes,
-    started_at: u.started_at, expires_at: u.expires_at, remaining_seconds: remainingSeconds,
-    is_disabled: u.is_disabled, is_expired: isExpired, created_at: u.created_at,
+    id: u.id, username: u.username, duration_minutes: isUnlimited ? (u.duration_minutes ?? null) : u.duration_minutes,
+    is_unlimited: isUnlimited, started_at: u.started_at, expires_at: isUnlimited ? null : u.expires_at,
+    remaining_seconds: remainingSeconds, is_disabled: u.is_disabled, is_expired: isExpired, created_at: u.created_at,
   };
+}
+
+function validateHttpUrl(raw: unknown): string | null {
+  const str = String(raw ?? '').trim();
+  if (!str) return '';
+  try {
+    const parsed = new URL(str);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
 }
 
 function validPassword(value: unknown): value is string {
@@ -188,12 +201,25 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const username = String(body?.username || '').trim();
     const password = String(body?.password || '');
-    const durationMinutes = Number(body?.duration_minutes);
-    if (!username || !validPassword(password) || !Number.isFinite(durationMinutes) || durationMinutes < 1) {
-      return json({ error: 'اسم المستخدم وكلمة المرور (6 أحرف على الأقل) ومدة الصلاحية مطلوبة' }, 400);
+    const isUnlimited = Boolean(body?.is_unlimited);
+    const hasDuration = body?.duration_minutes !== undefined && body?.duration_minutes !== null && body?.duration_minutes !== '';
+    const durationMinutes = hasDuration ? Number(body?.duration_minutes) : null;
+    if (!username || !validPassword(password)) {
+      return json({ error: 'اسم المستخدم وكلمة المرور (6 أحرف على الأقل) مطلوبة' }, 400);
+    }
+    if (!isUnlimited && (durationMinutes === null || !Number.isFinite(durationMinutes) || durationMinutes < 1)) {
+      return json({ error: 'مدة الصلاحية بالدقائق مطلوبة للحساب المحدود' }, 400);
+    }
+    if (isUnlimited && durationMinutes !== null && (!Number.isFinite(durationMinutes) || durationMinutes < 1)) {
+      return json({ error: 'مدة غير صالحة' }, 400);
     }
     const { data, error } = await db.from('users')
-      .insert({ username, password_hash: await hashPassword(password), duration_minutes: Math.floor(durationMinutes) })
+      .insert({
+        username,
+        password_hash: await hashPassword(password),
+        duration_minutes: isUnlimited ? (durationMinutes !== null ? Math.floor(durationMinutes) : null) : Math.floor(durationMinutes!),
+        is_unlimited: isUnlimited,
+      })
       .select('*').single();
     if (error) return json({ error: error.message }, 409);
     return json({ user: toPublicUser(data) }, 201);
@@ -216,6 +242,10 @@ Deno.serve(async (req) => {
   if (req.method === 'PATCH' && editMatch) {
     if (!canManageOperations) return json({ error: 'تعديل بيانات الحسابات متاح للمدير العام ومدير الموقع فقط' }, 403);
     const userId = editMatch[1];
+    const { data: existing, error: fetchErr } = await db.from('users').select('*').eq('id', userId).maybeSingle();
+    if (fetchErr) return json({ error: 'تعذر قراءة بيانات الحساب' }, 500);
+    if (!existing) return json({ error: 'الحساب غير موجود' }, 404);
+
     const body = await req.json().catch(() => ({}));
     const updates: Record<string, unknown> = {};
     if (typeof body?.username === 'string' && body.username.trim()) updates.username = body.username.trim();
@@ -223,15 +253,46 @@ Deno.serve(async (req) => {
       if (!validPassword(body.password)) return json({ error: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' }, 400);
       updates.password_hash = await hashPassword(body.password);
     }
-    if (body?.duration_minutes !== undefined) {
+
+    const nextUnlimited = body?.is_unlimited !== undefined ? Boolean(body.is_unlimited) : Boolean(existing.is_unlimited);
+    const hasDurationInput = body?.duration_minutes !== undefined && body?.duration_minutes !== null && body?.duration_minutes !== '';
+    let parsedDuration: number | null = existing.duration_minutes;
+    if (hasDurationInput) {
       const dm = Number(body.duration_minutes);
       if (!Number.isFinite(dm) || dm < 1) return json({ error: 'مدة غير صالحة' }, 400);
-      updates.duration_minutes = Math.floor(dm);
+      parsedDuration = Math.floor(dm);
     }
+
+    if (body?.is_unlimited !== undefined) {
+      updates.is_unlimited = nextUnlimited;
+    }
+
+    if (nextUnlimited) {
+      updates.duration_minutes = hasDurationInput ? parsedDuration : null;
+      updates.expires_at = null;
+    } else {
+      if (!parsedDuration || parsedDuration < 1) {
+        return json({ error: 'مدة الصلاحية بالدقائق مطلوبة عند إلغاء وضع الحساب المفتوح' }, 400);
+      }
+      if (hasDurationInput || body?.is_unlimited !== undefined) {
+        updates.duration_minutes = parsedDuration;
+      }
+      if (existing.started_at && (existing.is_unlimited || existing.expires_at === null)) {
+        updates.expires_at = new Date(Date.now() + parsedDuration * 60_000).toISOString();
+      }
+    }
+
     if (!Object.keys(updates).length) return json({ error: 'لا توجد حقول للتعديل' }, 400);
     const { data, error } = await db.from('users').update(updates).eq('id', userId).select('*').maybeSingle();
     if (error) return json({ error: error.message }, 400);
     if (!data) return json({ error: 'الحساب غير موجود' }, 404);
+
+    if (updates.expires_at !== undefined) {
+      await db.from('sessions')
+        .update({ expires_at: updates.expires_at })
+        .eq('user_id', userId).in('status', ['authorized', 'active']);
+    }
+
     return json({ user: toPublicUser(data) });
   }
 
@@ -260,6 +321,86 @@ Deno.serve(async (req) => {
       .order('created_at', { ascending: false }).limit(200);
     if (error) return json({ error: error.message }, 500);
     return json({ quotas: data ?? [] });
+  }
+
+  if (subPath === '/portal-settings') {
+    if (req.method === 'GET') {
+      const { data, error } = await db.from('portal_settings').select('*').eq('id', 1).maybeSingle();
+      if (error) return json({ error: 'تعذر تحميل إعدادات البوابة' }, 500);
+      return json({ settings: data });
+    }
+    if (req.method === 'PUT') {
+      if (!canManageOperations) return json({ error: 'تعديل إعدادات البوابة متاح للمدير العام ومدير الموقع فقط' }, 403);
+      const body = await req.json().catch(() => ({}));
+      const siteTitle = String(body?.site_title ?? '').trim();
+      const welcomeTitle = String(body?.welcome_title ?? '').trim();
+      const welcomeSubtitle = String(body?.welcome_subtitle ?? '').trim();
+      const freeNotice = String(body?.free_notice ?? '').trim();
+
+      if (!siteTitle || siteTitle.length > 80 || !welcomeTitle || welcomeTitle.length > 120) {
+        return json({ error: 'عنوان الموقع وعنوان الترحيب مطلوبان ضمن الطول المسموح' }, 400);
+      }
+      if (welcomeSubtitle.length > 240 || freeNotice.length > 200) {
+        return json({ error: 'النصوص التوضيحية تجاوزت الحد الأقصى المسموح' }, 400);
+      }
+
+      const channels = ['instagram', 'facebook', 'tiktok', 'whatsapp'] as const;
+      const updates: Record<string, unknown> = {
+        site_title: siteTitle,
+        welcome_title: welcomeTitle,
+        welcome_subtitle: welcomeSubtitle,
+        free_notice: freeNotice,
+        updated_at: new Date().toISOString(),
+      };
+
+      for (const ch of channels) {
+        const enabled = Boolean(body?.[`${ch}_enabled`]);
+        const normalizedUrl = validateHttpUrl(body?.[`${ch}_url`]);
+        if (normalizedUrl === null) {
+          return json({ error: `رابط ${ch} غير صالح؛ يجب أن يبدأ بـ https:// أو http://` }, 400);
+        }
+        if (enabled && !normalizedUrl) {
+          return json({ error: `يرجى إدخال رابط ${ch} قبل تفعيله` }, 400);
+        }
+        updates[`${ch}_enabled`] = enabled;
+        updates[`${ch}_url`] = normalizedUrl;
+      }
+
+      const phoneEnabled = Boolean(body?.phone_enabled);
+      const phoneNumber = String(body?.phone_number ?? '').trim();
+      if (phoneNumber && !/^[0-9+\-\s()]{3,32}$/.test(phoneNumber)) {
+        return json({ error: 'رقم الهاتف غير صالح' }, 400);
+      }
+      if (phoneEnabled && !phoneNumber) {
+        return json({ error: 'يرجى إدخال رقم الهاتف قبل تفعيله' }, 400);
+      }
+      updates.phone_enabled = phoneEnabled;
+      updates.phone_number = phoneNumber;
+
+      const { data, error } = await db.from('portal_settings').update(updates).eq('id', 1).select('*').single();
+      if (error) return json({ error: 'تعذر حفظ إعدادات البوابة' }, 400);
+      return json({ settings: data });
+    }
+  }
+
+  if (req.method === 'GET' && subPath === '/cleanup/summary') {
+    if (!isRoot) return json({ error: 'تنظيف قاعدة البيانات متاح لمدير الموقع فقط' }, 403);
+    const { data, error } = await db.rpc('get_cleanup_summary');
+    if (error) return json({ error: 'تعذر جلب ملخص التنظيف' }, 500);
+    const row = Array.isArray(data) ? data[0] : data;
+    return json({ summary: row ?? null });
+  }
+
+  if (req.method === 'POST' && subPath === '/cleanup/execute') {
+    if (!isRoot) return json({ error: 'تنظيف قاعدة البيانات متاح لمدير الموقع فقط' }, 403);
+    const body = await req.json().catch(() => ({}));
+    if (body?.confirm !== 'CLEANUP') {
+      return json({ error: 'تأكيد التنظيف الصريح مطلوب' }, 400);
+    }
+    const { data, error } = await db.rpc('cleanup_operational_data');
+    if (error) return json({ error: 'تعذر تنفيذ تنظيف البيانات التشغيلية' }, 500);
+    const row = Array.isArray(data) ? data[0] : data;
+    return json({ result: row ?? null });
   }
 
   return json({ error: 'Not found' }, 404);

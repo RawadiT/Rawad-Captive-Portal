@@ -34,3 +34,9 @@
 - Added `supabase/migrations/202611190001_portal_settings_and_unlimited.sql`, external `supabase/rollbacks/202611190001_portal_settings_and_unlimited.down.sql`, and synced `supabase/schema.sql`.
 - Verified migration UP -> rollback DOWN (`true|0|NO`) -> re-UP -> `tests/verify_system.mjs` (`POSTGRESQL 17 SCHEMA & EDGE-FUNCTION RPC TESTS PASSED`) on local PG 17.
 - Applied migration to `Rawad Test` (`efqsmehqnhuzohzjztni`) and verified `admins` (`hashim`, `testo`), existing `users` (`1`), `portal_settings` UTF-8 Arabic default row, and `get_cleanup_summary()` read-only output.
+
+## Phase 2 Edge Functions Deployment & Live HTTP Verification — 2026-11-19
+- Added signed domain-separated `portal_status` tokens in `supabase/functions/_shared/crypto.ts`.
+- Extended `supabase/functions/admin-api/index.ts` for unlimited accounts (`is_unlimited`), `GET/PUT /portal-settings` (`site_owner` & `general`, rejecting `javascript:`/`data:` schemes and invalid phones), and `GET /cleanup/summary` + `POST /cleanup/execute` (strictly `site_owner` ONLY, returning HTTP `403` to `general` and `subordinate`).
+- Extended `supabase/functions/portal-auth/index.ts` (`GET`/`POST portal_settings`, `session_status` authenticated with HMAC `status_token`, and unlimited user login responses) and `supabase/functions/verify-mac/index.ts` (`ALLOW:UNLIMITED`).
+- Deployed all 3 functions to `Rawad Test` (`efqsmehqnhuzohzjztni`) and passed live HTTP tests across role guards, `portal_settings` round-trip, unlimited account login/status/disable revocation, with temporary test accounts cleaned up afterwards.

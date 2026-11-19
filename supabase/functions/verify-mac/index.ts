@@ -69,7 +69,13 @@ Deno.serve(async (req) => {
   }
 
   const row = Array.isArray(data) ? data[0] : data;
-  if (!row?.allowed || !row.remaining_seconds || row.remaining_seconds <= 0) {
+  if (!row?.allowed) {
+    return text('DENY:not_authorized', 403);
+  }
+  if (row.session_type === 'unlimited' || row.remaining_seconds === null) {
+    return text('ALLOW:UNLIMITED', 200);
+  }
+  if (typeof row.remaining_seconds !== 'number' || row.remaining_seconds <= 0) {
     return text('DENY:not_authorized', 403);
   }
 

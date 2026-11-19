@@ -68,6 +68,7 @@ async function hmacSign(data: string, secret: string): Promise<string> {
 }
 
 export interface AdminTokenPayload {
+  scope?: string;
   sub: string;
   username: string;
   is_super_admin?: boolean;
@@ -75,7 +76,7 @@ export interface AdminTokenPayload {
 }
 
 export async function signAdminToken(payload: { sub: string; username: string; is_super_admin?: boolean }, secret: string, ttlSeconds = 8 * 3600): Promise<string> {
-  const full: AdminTokenPayload = { ...payload, exp: Math.floor(Date.now() / 1000) + ttlSeconds };
+  const full: AdminTokenPayload = { ...payload, scope: 'admin', exp: Math.floor(Date.now() / 1000) + ttlSeconds };
   const body = toBase64Url(JSON.stringify(full));
   const sig = await hmacSign(body, secret);
   return `${body}.${sig}`;
@@ -89,7 +90,61 @@ export async function verifyAdminToken(token: string, secret: string): Promise<A
   if (!constantTimeEqual(sig, expected)) return null;
   try {
     const payload = JSON.parse(fromBase64Url(body)) as AdminTokenPayload;
+    if (payload.scope && payload.scope !== 'admin') return null;
     if (!payload.sub || !payload.username || Date.now() / 1000 >= payload.exp) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+export interface PortalStatusTokenPayload {
+  scope: 'portal_status';
+  sid: string;
+  mac: string;
+  typ: 'free' | 'user';
+  exp: number;
+}
+
+export async function signPortalStatusToken(
+  payload: { sid: string; mac: string; typ: 'free' | 'user' },
+  secret: string,
+  ttlSeconds = 86400
+): Promise<string> {
+  const full: PortalStatusTokenPayload = {
+    scope: 'portal_status',
+    sid: payload.sid,
+    mac: payload.mac.toUpperCase(),
+    typ: payload.typ,
+    exp: Math.floor(Date.now() / 1000) + ttlSeconds,
+  };
+  const body = toBase64Url(JSON.stringify(full));
+  const sig = await hmacSign(body, secret);
+  return `${body}.${sig}`;
+}
+
+export async function verifyPortalStatusToken(
+  token: string,
+  secret: string
+): Promise<PortalStatusTokenPayload | null> {
+  if (!token || !secret) return null;
+  const parts = token.split('.');
+  if (parts.length !== 2) return null;
+  const [body, sig] = parts;
+  const expected = await hmacSign(body, secret);
+  if (!constantTimeEqual(sig, expected)) return null;
+  try {
+    const payload = JSON.parse(fromBase64Url(body)) as PortalStatusTokenPayload;
+    if (
+      payload.scope !== 'portal_status' ||
+      !payload.sid ||
+      !payload.mac ||
+      (payload.typ !== 'free' && payload.typ !== 'user') ||
+      typeof payload.exp !== 'number' ||
+      Date.now() / 1000 >= payload.exp
+    ) {
+      return null;
+    }
     return payload;
   } catch {
     return null;
