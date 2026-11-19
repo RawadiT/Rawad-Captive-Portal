@@ -2,9 +2,9 @@ name: System & PostgreSQL Verification
 
 on:
   push:
-    branches: [field-test-preparation]
+    branches: [main, field-test-preparation]
   pull_request:
-    branches: [field-test-preparation]
+    branches: [main, field-test-preparation]
   workflow_dispatch:
 
 jobs:
@@ -13,7 +13,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16
+        image: postgres:17
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: test_password
@@ -57,5 +57,5 @@ jobs:
         run: |
           set -o pipefail
           node tests/verify_system.mjs | tee verify.log
-          grep -q "POSTGRESQL 16 SCHEMA & EDGE-FUNCTION RPC TESTS PASSED" verify.log
+          grep -q "POSTGRESQL 17 SCHEMA & EDGE-FUNCTION RPC TESTS PASSED" verify.log
           grep -q "ALL SYSTEM VERIFICATIONS PASSED" verify.log

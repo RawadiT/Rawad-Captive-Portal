@@ -31,3 +31,14 @@ usb-package/
 *.log
 .DS_Store
 Thumbs.db
+
+# Local Backups, DB Dumps & Client Password Files
+*.bak
+*.backup-*
+backup-*/
+backup_roles.sql
+backup_schema.sql
+backup_schema_full.sql
+backup_data.sql
+pgpass.conf
+.pgpass
