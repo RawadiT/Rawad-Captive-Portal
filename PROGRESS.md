@@ -27,3 +27,10 @@
 - The existing `routeros/deploy.rsc` is scoped to production `ether10` / `192.168.20.0/24`; it is not suitable for the isolated CHR lab (`bridge` / `192.168.88.0/24`) and must not be executed there unchanged.
 - No Supabase deployment, RouterOS configuration change, file upload to CHR, or production change has been performed in this step.
 - Next: configure and deploy against Rawad Test using local environment credentials, then implement and verify the CHR-specific integration before declaring CRUD operations complete.
+
+## Phase 1 Database Migration & Verification — 2026-11-19
+- Downloaded PostgreSQL 17.9 Windows x64 portable binaries into `scratch/pg17/` (no Windows install/service/system PATH modification; local PG 16 untouched).
+- Captured official 3-file PG 17 backup (`backup_roles.sql`, `backup_schema.sql`, `backup_data.sql` + `backup_schema_full.sql`) from `Rawad Test` (`efqsmehqnhuzohzjztni`, PG 17.12) via Session Pooler + `pgpass.conf`, and verified restore (`admins=2`, `users=1`, `free_quotas=2`, `sessions=10`) into ephemeral local PG 17 (`127.0.0.1:55432`, documenting `SET (pg_attver=...)` and cluster-role notes for vanilla PG 17).
+- Added `supabase/migrations/202611190001_portal_settings_and_unlimited.sql`, external `supabase/rollbacks/202611190001_portal_settings_and_unlimited.down.sql`, and synced `supabase/schema.sql`.
+- Verified migration UP -> rollback DOWN (`true|0|NO`) -> re-UP -> `tests/verify_system.mjs` (`POSTGRESQL 17 SCHEMA & EDGE-FUNCTION RPC TESTS PASSED`) on local PG 17.
+- Applied migration to `Rawad Test` (`efqsmehqnhuzohzjztni`) and verified `admins` (`hashim`, `testo`), existing `users` (`1`), `portal_settings` UTF-8 Arabic default row, and `get_cleanup_summary()` read-only output.

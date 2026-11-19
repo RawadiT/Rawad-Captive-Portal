@@ -142,8 +142,10 @@ assert.match(schemaSql, /GRANT EXECUTE ON FUNCTION public\.ack_revoked_sessions\
 let pgExec = null;
 if (process.env.TEST_DATABASE_URL) {
   pgExec = (sql) =>
-    execFileSync('psql', [process.env.TEST_DATABASE_URL, '-X', '-q', '-t', '-A', '-v', 'ON_ERROR_STOP=1', '-c', sql], {
+    execFileSync('psql', [process.env.TEST_DATABASE_URL, '-X', '-q', '-t', '-A', '-v', 'ON_ERROR_STOP=1'], {
+      input: sql,
       encoding: 'utf8',
+      env: { ...process.env, PGCLIENTENCODING: 'UTF8' },
     }).trim();
 } else {
   const probe = spawnSync('docker', ['exec', 'deployment-postgres-1', 'pg_isready', '-U', 'postgres', '-d', 'rawad_test'], {
@@ -284,11 +286,67 @@ if (pgExec) {
     const stillExhausted = pgExec(`SELECT allowed, remaining_seconds FROM public.request_free_quota('${macSameDay}', '192.168.20.11', 1800, '2026-11-17T18:35:00Z'::timestamptz);`);
     assert.equal(stillExhausted, 'f|0', 'Consumed free quota must remain exhausted after schema.sql re-apply');
 
-    console.log('POSTGRESQL 16 SCHEMA & EDGE-FUNCTION RPC TESTS PASSED');
+    // Phase 1a: portal_settings single-row + RLS enabled
+    const psCount = Number(pgExec(`SELECT COUNT(*) FROM public.portal_settings WHERE id = 1;`));
+    assert.equal(psCount, 1, 'portal_settings must hold exactly 1 configuration row (id = 1)');
+    const psRls = pgExec(`SELECT relrowsecurity::text FROM pg_class WHERE oid = 'public.portal_settings'::regclass;`);
+    assert.equal(psRls, 'true', 'portal_settings must have RLS enabled');
+
+    // Phase 1b: Unlimited account lifecycle (no expiry on 2099, revoked upon disable)
+    const uidUnlim = pgExec(`INSERT INTO public.users (username, password_hash, duration_minutes, is_unlimited) VALUES ('${testUser}_unlim', 'pbkdf2:00:00', NULL, true) RETURNING id;`);
+    const macUnlim = '02:AA:BB:CC:DD:06';
+    const authUnlim = pgExec(`SELECT allowed || '|' || COALESCE(remaining_seconds::text, 'NULL') || '|' || COALESCE(expires_at::text, 'NULL') FROM public.authorize_user_login('${uidUnlim}', '${macUnlim}', '192.168.20.16', '2026-11-17T12:00:00Z'::timestamptz);`);
+    assert.equal(authUnlim, 'true|NULL|NULL', 'Unlimited authorize_user_login must return NULL remaining_seconds and NULL expires_at');
+
+    const verifyUnlim = pgExec(`SELECT allowed || '|' || COALESCE(remaining_seconds::text, 'NULL') || '|' || session_type FROM public.verify_mac_authorization('${macUnlim}', '192.168.20.16', '2026-11-17T12:01:00Z'::timestamptz);`);
+    assert.equal(verifyUnlim, 'true|NULL|unlimited', 'Unlimited verify_mac_authorization must return allowed=true, remaining_seconds=NULL, session_type=unlimited');
+
+    const unlimStillAliveFarFuture = pgExec(`SELECT COALESCE(string_agg(mac_address, ','), '') FROM public.get_revoked_sessions('2099-01-01T00:00:00Z'::timestamptz);`);
+    assert.ok(!unlimStillAliveFarFuture.includes(macUnlim), 'Unlimited active session must never auto-expire');
+
+    pgExec(`UPDATE public.users SET is_disabled = true WHERE id = '${uidUnlim}';`);
+    const vUnlimDisabled = pgExec(`SELECT allowed, remaining_seconds FROM public.verify_mac_authorization('${macUnlim}', '192.168.20.16', '2026-11-17T12:05:00Z'::timestamptz);`);
+    assert.equal(vUnlimDisabled, 'f|0', 'Disabled unlimited user must fail closed in verify_mac_authorization');
+    const revUnlim = pgExec(`SELECT COALESCE(string_agg(mac_address || '|' || ip_address, ','), '') FROM public.get_revoked_sessions('2026-11-17T12:05:00Z'::timestamptz);`);
+    assert.ok(revUnlim.includes(`${macUnlim}|192.168.20.16`), 'Disabled unlimited session must be queued in get_revoked_sessions');
+    const unlimSessId = pgExec(`SELECT id FROM public.sessions WHERE mac_address = '${macUnlim}' ORDER BY created_at DESC LIMIT 1;`);
+    pgExec(`SELECT public.ack_revoked_sessions(ARRAY['${unlimSessId}']::uuid[]);`);
+
+    // Phase 1c: Overnight active free session guard + Option B Baghdad-date cleanup
+    const macOvernight = '02:AA:BB:CC:DD:07';
+    const ovStart = '2026-11-17T20:50:00Z'; // 23:50 Baghdad on Nov 17
+    const ovCheck = '2026-11-17T21:05:00Z'; // 00:05 Baghdad on Nov 18 (15m remaining)
+    const rOv1 = pgExec(`SELECT allowed, is_new, remaining_seconds FROM public.request_free_quota('${macOvernight}', '192.168.20.17', 1800, '${ovStart}'::timestamptz);`);
+    assert.equal(rOv1, 't|t|1800');
+    // Cleanup run at 00:05 Baghdad must NOT remove unexpired overnight free quota or allow resetting to 1800s
+    pgExec(`SELECT public.cleanup_operational_data('${ovCheck}'::timestamptz);`);
+    const rOv2 = pgExec(`SELECT allowed, is_new, remaining_seconds FROM public.request_free_quota('${macOvernight}', '192.168.20.17', 1800, '${ovCheck}'::timestamptz);`);
+    assert.equal(rOv2, 't|f|900', 'Active overnight free session must resume remaining time (900s) rather than reset after midnight');
+
+    // Past-day expired quota vs Today Baghdad exhausted quota under Option B cleanup
+    const macPast = '02:AA:BB:CC:DD:08';
+    const macToday = '02:AA:BB:CC:DD:09';
+    pgExec(`INSERT INTO public.free_quotas (mac_address, quota_date, started_at, expires_at) VALUES ('${macPast}', '2026-11-15', '2026-11-15T10:00:00Z', '2026-11-15T10:30:00Z');`);
+    pgExec(`SELECT public.request_free_quota('${macToday}', '192.168.20.19', 1800, '2026-11-18T07:00:00Z'::timestamptz);`); // 10:00 Baghdad Nov 18
+    const cleanNow = '2026-11-18T10:00:00Z'; // 13:00 Baghdad Nov 18 (today quota already expired at 10:30 Baghdad)
+    const sumBefore = pgExec(`SELECT past_free_quotas_count || '|' || (today_free_quotas_preserved >= 1)::text FROM public.get_cleanup_summary('${cleanNow}'::timestamptz);`);
+    assert.ok(sumBefore.endsWith('|true') && Number(sumBefore.split('|')[0]) >= 1, 'get_cleanup_summary must count past-day expired quotas and preserve today Baghdad quotas');
+
+    const cleanRes = pgExec(`SELECT (deleted_free_quotas >= 1)::text || '|' || preserved_users FROM public.cleanup_operational_data('${cleanNow}'::timestamptz);`);
+    assert.ok(cleanRes.startsWith('true|'), 'cleanup_operational_data must delete past-day expired quotas');
+    const pastGone = Number(pgExec(`SELECT COUNT(*) FROM public.free_quotas WHERE mac_address = '${macPast}';`));
+    const todayPreserved = Number(pgExec(`SELECT COUNT(*) FROM public.free_quotas WHERE mac_address = '${macToday}' AND quota_date = '2026-11-18';`));
+    assert.equal(pastGone, 0, 'Past-day expired free_quotas must be deleted');
+    assert.equal(todayPreserved, 1, 'Today Baghdad free_quotas MUST be preserved by Option B cleanup');
+
+    const stillBlockedToday = pgExec(`SELECT allowed, remaining_seconds FROM public.request_free_quota('${macToday}', '192.168.20.19', 1800, '2026-11-18T10:05:00Z'::timestamptz);`);
+    assert.equal(stillBlockedToday, 'f|0', 'Preserved today Baghdad quota must continue blocking repeat free login');
+
+    console.log('POSTGRESQL 17 SCHEMA & EDGE-FUNCTION RPC TESTS PASSED');
   } finally {
     pgExec(`
-      DELETE FROM public.sessions WHERE mac_address IN ('${testMac1}', '${testMac2}', '02:AA:BB:CC:DD:03', '02:AA:BB:CC:DD:04', '02:AA:BB:CC:DD:05');
-      DELETE FROM public.free_quotas WHERE mac_address IN ('${testMac1}', '02:AA:BB:CC:DD:03');
+      DELETE FROM public.sessions WHERE mac_address IN ('${testMac1}', '${testMac2}', '02:AA:BB:CC:DD:03', '02:AA:BB:CC:DD:04', '02:AA:BB:CC:DD:05', '02:AA:BB:CC:DD:06', '02:AA:BB:CC:DD:07', '02:AA:BB:CC:DD:08', '02:AA:BB:CC:DD:09');
+      DELETE FROM public.free_quotas WHERE mac_address IN ('${testMac1}', '02:AA:BB:CC:DD:03', '02:AA:BB:CC:DD:07', '02:AA:BB:CC:DD:08', '02:AA:BB:CC:DD:09');
       DELETE FROM public.users WHERE username LIKE '${testUser}%';
     `);
   }
