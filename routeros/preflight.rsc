@@ -33,12 +33,15 @@
     }
 }
 
-:put "=== [5/9] Existing HotSpot & DHCP on ether10 ==="
+:put "=== [5/9] Existing HotSpot, DHCP & VLANs on ether10 ==="
 /ip dhcp-server print where interface="ether10"
 /ip hotspot print where interface="ether10"
+/interface vlan print where interface="ether10"
 
-:put "=== [6/9] Existing Firewall Rules referencing ether10 ==="
+:put "=== [6/9] Existing Firewall, NAT & Mangle Rules referencing ether10 ==="
 /ip firewall filter print where in-interface="ether10" || out-interface="ether10"
+/ip firewall nat print where in-interface="ether10" || out-interface="ether10" || src-address~"192.168.20."
+/ip firewall mangle print where in-interface="ether10" || out-interface="ether10"
 /ipv6 firewall filter print where in-interface="ether10"
 
 :put "=== [7/9] DNS Remote Requests & Open-Resolver Safety Check ==="
