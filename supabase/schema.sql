@@ -149,6 +149,12 @@ DROP INDEX IF EXISTS public.idx_sessions_one_active_user;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_one_active_mac
   ON public.sessions (mac_address)
   WHERE status IN ('authorized', 'active');
+CREATE INDEX IF NOT EXISTS idx_sessions_pending_revocations
+  ON public.sessions (revoked_at ASC)
+  WHERE status IN ('expired', 'disconnected') AND revoked_at IS NOT NULL AND revocation_ack_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_sessions_active_expires
+  ON public.sessions (expires_at)
+  WHERE status IN ('authorized', 'active') AND expires_at IS NOT NULL;
 
 -- 5. Captive portal branding, welcome text, social links, and support phone (single row)
 CREATE TABLE IF NOT EXISTS public.portal_settings (

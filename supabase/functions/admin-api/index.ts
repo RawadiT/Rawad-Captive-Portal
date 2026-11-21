@@ -1,5 +1,19 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { hashPassword, signAdminToken, verifyAdminToken, verifyPassword } from '../_shared/crypto.ts';
+
+let cachedDb: SupabaseClient | null = null;
+let cachedDbKey = '';
+
+function getDb(supabaseUrl: string, serviceKey: string): SupabaseClient {
+  const cacheKey = `${supabaseUrl}:${serviceKey}`;
+  if (!cachedDb || cachedDbKey !== cacheKey) {
+    cachedDb = createClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    cachedDbKey = cacheKey;
+  }
+  return cachedDb;
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -59,9 +73,7 @@ Deno.serve(async (req) => {
     return json({ error: 'Server configuration error' }, 500);
   }
 
-  const db = createClient(supabaseUrl, serviceKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  const db = getDb(supabaseUrl, serviceKey);
   const url = new URL(req.url);
   const subPath = url.pathname.replace(/^.*\/admin-api/, '') || '/';
 
