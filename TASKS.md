@@ -92,3 +92,11 @@
 | `RB-053` | Establish Proven Operational Capacity & Safety Margin | Documented highest consistent `100%` tier (`350` 1-proc / `400` 5-proc), error onset (`400` 1-proc / `450` cumulative 5-proc), `P50/P95/P99`, `pg_stat_database`, and conservative `200–250` auth safety margin (RB4011 HW `NOT TESTED`) | `PASSED` (`PASS`) |
 | `RB-054` | Final Repository Cleanliness & Reference Integrity Verification | Verified all HTML/CSS local assets (`EXISTS`), intentional SHA-256 duplicates (`admin/` vs `hotspot/`), zero untracked non-ignored files (`!! supabase/.temp/` only), external `scratch/` preserved | `PASSED` (`PASS`) |
 | `RB-055` | Final Acceptance Gate & Doc Sync (`verify_system.mjs`, Secret Scan, DB, UI) | Re-verified `verify_system.mjs` (static pass / PG local skipped), secret scan (`GREP_EXIT=1`), `Rawad Test` clean DB (`admins=2`, `users=2`, `rem=0`), live Admin UI `HTTP 200`, clean Git sync & push | `PASSED` (`PASS`) |
+
+## Repeatability & Certified Cloud Capacity Confirmation (`RB-056` — `RB-058`)
+
+| Task ID | Task Name | Acceptance Criteria | Status |
+| :--- | :--- | :--- | :--- |
+| `RB-056` | Run 3 Independent Multi-Process Rounds (`300, 350, 400, 450, 500`) | 15 independent 5-process rounds on `Rawad Test` with CHR scheduler paused, between-round cleanup, zero orphan/duplicate sessions, `P50/P95/P99`, timeout/`429`/`5xx` counts, and strict unchanged timeouts | `PASSED` (`300/350/400` = `3/3`; `450/500` = `0/3`) |
+| `RB-057` | Certify Cloud Auth Capacity vs Safe Margin vs Untested RB4011 | Strictly certify `400` (largest tier passing `3/3` at 100%), set recommended safe operating capacity at `200–250`, and explicitly classify real RB4011 capacity `NOT TESTED` | `PASSED` (`Certified Cloud: 400`; HW `NOT TESTED`) |
+| `RB-058` | Final Documentation Closure (`TASKS`, `PROGRESS`, `TEST-REPORT`, `PRODUCTION-READINESS`) | Document all 15 rounds, 3-way capacity distinction, verify cleanly, commit & push without `--force`, deliver final report | `PASSED` (`PASS`) |
