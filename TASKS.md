@@ -1,43 +1,49 @@
-# TASKS.md — Rawad Captive Portal (MikroTik HotSpot + Supabase Edge Functions)
+# TASKS.md — Rawad RB4011 Full Simulation & Production Readiness
 
-**Branch:** `field-test-preparation` (NEVER merge to `main` without explicit approval)
+**Workspace / Target Branches:** `main`, `field-test-preparation`  
+**Lab Environment:** `Rawad-CHR-Lab` (`RouterOS 7.25.1 x86_64`) + `RAWAD-WIN10-CLIENT` (`192.168.88.250`) + Supabase `Rawad Test` (`efqsmehqnhuzohzjztni`, PostgreSQL `17.12`)  
+**Production Safety Lock:** ZERO connections or changes to company production RB4011 or production Supabase. Never delete `admins` (`hashim`, `testo`) or original `users` (`test`, `hashim`). Never run `POST /cleanup/execute` on live `Rawad Test` data.
 
-## Completed
-- [x] Require strict numeric HTTP `code = 200` (reject missing `code` / `"nothing"` / `null` / non-200) across all 4 `/tool fetch` paths in `routeros/deploy.rsc` (on-login, revocation feed, full ACK batch, final partial ACK batch).
-- [x] Update `parseAck()` and RouterOS 4-path HTTP-200 checks in `tests/verify_system.mjs` (rejecting missing `code`, `code: null`, `401`, `500`, `status: 'failed'`, `ACK:0`, `ACK:`, `ACK:1abc`, and out-of-range counts).
-- [ ] Live MikroTik RB4011 (`ether10`) + Live Supabase Edge Function integration test (not performed — required before claiming live MikroTik compatibility).
+---
 
+## Historical Completed Baselines (2026-11-18 — 2026-11-20)
+- [x] Strict numeric HTTP `200` fetch checks (`routeros/deploy.rsc` 4 paths) & `parseAck()` (`tests/verify_system.mjs`).
+- [x] Three-tier admin role hierarchy (`site_owner`, `general`, `subordinate`), PG 17 portable 3-file backup & verified restore, Phase 1–5 migrations (`202611190001_portal_settings_and_unlimited.sql` + external rollback `supabase/rollbacks/`), Edge Functions deployment, Unified Light Daytime Admin UI (`admin/`) & Customer Portal (`hotspot/`), CHR isolated static admin container (`x86_64` ONLY), and dual Win11/Win10 admin access restoration.
 
-## Admin dashboard hierarchy and visual refresh (2026-11-18)
-- [x] Add immutable site-owner, general-manager and subordinate roles in the test migration.
-- [x] Allow all authenticated roles to list internet accounts; allow all roles to create, disable and permanently delete internet accounts.
-- [x] Restrict internet-account editing and free-quota viewing to site owner/general manager.
-- [x] Restrict administrator creation, editing, role assignment and deletion to the site owner.
-- [x] Add manager role selection and role labels to the dashboard.
-- [x] Add company logo and motion/interaction styling.
-- [ ] Apply `202611180002_admin_hierarchy.sql` to Rawad Test and run role-based API/UI regression tests.
-- [ ] Verify subordinate/general manager cannot access administrator-management endpoints and site owner cannot be modified/deleted.
+---
 
+## Master Task Execution Board (`RB-001` — `FINAL-ACCEPTANCE-TEST`)
 
-## Isolated CHR + Rawad Test end-to-end integration (2026-11-18)
-
-- [ ] Confirm Rawad Test Supabase project URL, anon key, deployment access, and current migration state locally (never commit secrets).
-- [ ] Add an explicit lab-only RouterOS integration path for the existing CHR bridge / 192.168.88.0/24 environment; do not reuse the production ether10 deployment script.
-- [ ] Connect admin account create/update/disable/delete operations to the actual MikroTik User Manager/RADIUS source of truth, with verified success/failure semantics.
-- [ ] Define and implement the account model consistently across Supabase and User Manager: username, password, validity from first successful login, per-user upload/download limits, and half-hour preset defaults.
-- [ ] Ensure delete/disable revokes active sessions and removes or disables the corresponding RouterOS/User Manager identity; verify by querying CHR after each action.
-- [ ] Deploy and configure the admin-api, portal-auth, and verify-mac Edge Functions against Rawad Test only.
-- [ ] Upload the hotspot/ files to the CHR HotSpot HTML directory and test login, free access, error, status, and logout flows from RAWAD-WIN10-CLIENT.
-- [ ] Configure admin/index.html with the Rawad Test URL and anon key locally; never expose service-role or router shared secrets in browser code.
-- [ ] Run API/UI regression tests and live create/edit/disable/delete/expiry/speed tests against CHR; record actual router-side evidence.
-- [ ] Update FIELD_TEST.md and PROGRESS.md with commands, observed results, and remaining limitations.
-- [ ] Keep all lab work isolated; do not run routeros/deploy.rsc on the company RB4011 and do not merge to main without explicit approval.
-
-## Phase 1–5 Restoration & Enhancements (2026-11-19)
-- [x] Step 0: Acquire PG 17.9 portable (`scratch/pg17/`), capture verified 3-file backup of `Rawad Test` (`efqsmehqnhuzohzjztni`), and verify full roles/schema/data restore into ephemeral local PG 17 (`127.0.0.1:55432`).
-- [x] Phase 1: Create & verify `202611190001_portal_settings_and_unlimited.sql`, external rollback `supabase/rollbacks/202611190001_portal_settings_and_unlimited.down.sql`, and synced `supabase/schema.sql` (`portal_settings`, `users.is_unlimited`, nullable `sessions.expires_at`, overnight free-session guard, Option B Baghdad cleanup RPCs); apply and verify on `Rawad Test`.
-- [x] Phase 2: Edge Functions (`_shared/crypto.ts`, `admin-api`, `portal-auth`, `verify-mac`) + live deployment & HTTP verification on `Rawad Test`.
-- [x] Phase 3: Unified Light Daytime Admin Dashboard (`admin/`) + browser verification.
-- [x] Phase 4: Lab `ROUTER_SHARED_SECRET` + CHR `on-login`/`revocations` + unified Customer Portal (`hotspot/`) + live `RAWAD-WIN10-CLIENT` E2E test.
-- [x] Phase 5: Isolated static admin container on `Rawad-CHR-Lab` (`x86_64` ONLY) + backup documentation + final PG 17 regression & Git sync.
-- [x] Lab Admin Access Restoration (2026-11-20): Diagnosed Adapter 3 (`ether3`) missing IP + Win10 VM isolation rules, configured `192.168.56.2/24` on `ether3` + scoped `dstnat`/`forward` rules for `192.168.56.1` (Win11) and `192.168.88.250` (Win10 VM) without exposing WAN or breaking HotSpot, verified across CHR reboot.
+| Task ID | Stage | Task Name | Prerequisites | Acceptance Criteria | Status |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `RB-001` | 0 | Initialize Task-Driven Execution board (`TASKS.md`, `PROGRESS.md`) | — | All tasks `RB-001..RB-030` & `FINAL-ACCEPTANCE-TEST` defined with criteria and tracked live | `PASSED` |
+| `RB-002` | 1 | Full VirtualBox & `Rawad-CHR-Lab` Baseline Audit | `RB-001` | Full CHR `/export`, containers, firewall/NAT, HotSpot, schedulers, `127.0.0.1:2222/8088`, `192.168.56.2:8088`, and `RAWAD-WIN10-CLIENT` screenshot captured | `PASSED` |
+| `RB-003` | 1 | `Rawad Test` Supabase, Edge Functions & Repo Baseline Audit | `RB-001` | DB counts (`admins=2`, `users=2`, `settings=1`), 3 ACTIVE Edge Functions, HTTP probes, and `verify_system.mjs` baseline verified | `PASSED` |
+| `RB-004` | 1 | Stage 1 Gap, Risk & Hardware-Parity Summary | `RB-002, RB-003` | Initial risks (WSL2/Hyper-V disabled -> no local ARM32 QEMU; `deploy.rsc` rule placement vs `hotspot=auth`; `preflight.rsc` legacy names) logged in `PROGRESS.md` | `PASSED` |
+| `RB-005` | 2 | Expand `Rawad-CHR-Lab` to Multi-Department RB4011 VLAN Topology | `RB-004` | Non-destructive VLANs (`vlan10-mgmt`, `vlan20-staff`, `vlan30-floor1`, `vlan40-floor2` on `br-corp-sim`) + DHCP/NAT/inter-VLAN firewall isolation added without breaking HotSpot or Admin access | `PASSED` |
+| `RB-006` | 2 | Verify Multi-Subnet Routing, HotSpot & Cross-VLAN Firewall Isolation | `RB-005` | Guests blocked from all simulated `10.10.x.0/24` subnets with observed drop counters; Win11 (`192.168.56.2:8088`, `127.0.0.1:8088`) & Win10 (`192.168.88.1:8088`) intact | `PASSED` |
+| `RB-007` | 2 | Simulate WAN Link Disconnect & Automatic Recovery on CHR | `RB-006` | `setlinkstate1 off` enforces fail-closed external access while local LAN/Host-Only admin stays reachable; `setlinkstate1 on` restores Supabase connectivity | `PASSED` |
+| `RB-008` | 2 | Author `LAB-SETUP.md` Topology & Reproduction Guide | `RB-007` | VirtualBox NICs, IP/VLAN table, CHR reproduction commands, and CHR `x86_64` vs RB4011 `ARM32` differences documented accurately | `PASSED` |
+| `RB-009` | 3 | Line-by-Line Audit of `deploy.rsc`, `preflight.rsc`, `verify.rsc`, `rollback.rsc` | `RB-004` | Every RouterOS v7 command, filter placement,HotSpot profile, NAT, IPv6, NTP/DNS, and revocation scheduler reviewed | `PASSED` |
+| `RB-010` | 3 | Validate RouterOS v7 Syntax & Critical `hotspot=auth` Filter Placement | `RB-009` | Verify whether `cUnverified` with `place-before=0` without `hotspot=auth` blocks Walled Garden pre-auth Supabase fetches on CHR | `PASSED` |
+| `RB-011` | 3 | Author `RB4011-COMPATIBILITY.md` Matrix | `RB-010` | Complete compatibility matrix with 4 exact classifications (`verified`, `theoretical`, `incompatible`, `requires real RB4011`) | `PASSED` |
+| `RB-012` | 3 | Author `ROLLBACK.md` Multi-Layer Rollback Runbook | `RB-009` | Safe rollback procedures documented for PostgreSQL schema/backups, Edge Functions, CHR Lab, and production `rollback.rsc` | `PASSED` |
+| `RB-013` | 4 | Assess Container & Admin Dashboard on RB4011 ARM32 / NAND Constraints | `RB-004` | BusyBox ARM32/ARMv5 image constraints, RAM/CPU/storage/write-sectors measured; explicitly mark RB4011 container execution NOT verified / NOT approved | `PASSED` |
+| `RB-014` | 4 | Evaluate & Validate Safe Local Static Hosting Alternative for `admin/` | `RB-013` | Zero-VPS internal company LAN static hosting architecture documented & tested locally against `Rawad Test` | `PASSED` |
+| `RB-015` | 4 | Consolidate Stage 4 Findings into Docs | `RB-014` | ARM32 warnings & local alternative recorded clearly in `RB4011-COMPATIBILITY.md` and `PRODUCTION-READINESS.md` | `PASSED` |
+| `RB-016` | 5 | Execute Comprehensive HotSpot & Captive Portal E2E Tests | `RB-008` | Free 30m quota, limited user, unlimited (`ALLOW:UNLIMITED`), expiry/revocation disconnect, `F5` continuity, logout, multi-client MACs tested; temp rows cleaned | `PASSED` |
+| `RB-017` | 5 | Execute Supabase Edge Functions (`portal-auth`, `verify-mac`, `admin-api`) Suite | `RB-008` | All endpoints, `portal_settings` live reflection, `status_token`, revocations + ACK verified; ZERO `/cleanup/execute` on live data | `PASSED` |
+| `RB-018` | 5 | Execute Security Hardening Suite (RLS, Roles, HMAC, MAC Spoof, Firewall) | `RB-008` | Anon REST blocked, `site_owner`/`general`/`subordinate` 403 guards, tampered/cross-MAC HMAC rejected, `verify-mac` secret enforced, Firewall isolation proven | `PASSED` |
+| `RB-019` | 5 | Verify Admin Dashboard Live UI, Assets, RTL/Cairo & Desktop/Mobile | `RB-008` | `chrome-devtools-mcp` checks on `192.168.56.2:8088` across Desktop (`1440x900`) & Mobile (`390x844`): HTTP 200 local assets, 0 console errors, 0 overflow | `PASSED` |
+| `RB-020` | 5 | Execute Live Failure Recovery Tests (5 Scenarios) | `RB-016..019` | WAN cut/restore, Supabase unreachable fail-closed, CHR reboot auto-start, Container stop/start recovery, Client NIC cut/reconnect all passed | `PASSED` |
+| `RB-021` | 5 | Post-Stage-5 Database Cleanliness Verification | `RB-020` | Confirm `Rawad Test` restored to exact baseline (`admins=2: hashim, testo`; `users=2: test, hashim`; clean `free_quotas`/`sessions`) | `PASSED` |
+| `RB-022` | 6 | Execute Gradual Load & Stress Tests (10, 25, 40, 60, 100 Concurrent) | `RB-021` | Real latency (`p50`, `p95`, `max`), HTTP status counts, error rates, and CHR CPU/RAM/HDD/write-sectors recorded at 10/25/40/60/100 concurrency | `PASSED` |
+| `RB-023` | 6 | Cleanup All Synthetic Load-Test Data & Verify Recovery | `RB-022` | Zero synthetic users/sessions/quotas left in `Rawad Test`; CHR responsive and healthy | `PASSED` |
+| `RB-024` | 6 | Document Measured Load Results & Lab Caveats in `TEST-REPORT.md` | `RB-023` | Exact measured figures logged with explicit warning NOT to extrapolate CHR `x86_64` numbers to RB4011 hardware | `PASSED` |
+| `RB-025` | 7 | Fix Safe Discovered Code Bugs (`preflight.rsc`, `deploy.rsc`, `admin.js`, etc.) | `RB-010, RB-024` | All safe discovered bugs fixed cleanly without breaking existing invariants or `Rawad Test` compatibility | `PASSED` |
+| `RB-026` | 7 | Add Regression Assertions & Re-Run Full Verification Suite | `RB-025` | `tests/verify_system.mjs` updated & passing; re-verify affected CHR/UI/Edge Function flows cleanly | `PASSED` |
+| `RB-027` | 8 | Execute Final Documentation Consistency & Pre-Acceptance Audit | `RB-026` | Verify all 6 deliverable docs (`TASKS`, `PROGRESS`, `TEST-REPORT`, `RB4011-COMPATIBILITY`, `LAB-SETUP`, `ROLLBACK`) match observed outputs | `PASSED` |
+| `FINAL-ACCEPTANCE-TEST` | 8 | Complete 17-Point Cold-Start Final Acceptance Test | `RB-027` | Cold VM power-off/on of CHR + Win10 VM, all 17 acceptance items executed & passed after final fixes, zero secrets leaked | `PASSED` |
+| `RB-028` | 8 | Author `PRODUCTION-READINESS.md` & Hardware Rollout Checklist | `FINAL-ACCEPTANCE-TEST` | Final honest readiness %, explicit assessment on extra RB4011 coding, and minimal-risk company RB4011 checklist completed | `PASSED` |
+| `RB-029` | 9 | Organized Git Commits, Branch Sync (`main` & `field-test-preparation`) & Push | `RB-028` | Clean non-forced push to `origin/main` and `origin/field-test-preparation`; remote SHA-1 matches local; `git status` clean | `IN_PROGRESS` |
+| `RB-030` | 9 | Deliver Unified 14-Point Arabic Final Report | `RB-029` | Complete 14-section report with verified facts, `file:///` links, and honest hardware-only checklist delivered | `IN_PROGRESS` |

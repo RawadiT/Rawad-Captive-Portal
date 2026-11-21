@@ -82,3 +82,50 @@
   - `/ip firewall filter remove [find where comment~"rawad-admin-allow-win10-lab|rawad-admin-block-hostonly-other"]`
   - `/ip firewall nat remove [find where comment~"rawad-admin-hostonly-staff|rawad-admin-win10-lab"]`
   - `/ip address remove [find where comment="rawad-admin-hostonly"]`
+
+---
+
+## تنفيذ المهمة الشاملة لمحاكاة RB4011 وجاهزية الإنتاج — 2026-11-21
+
+### المرحلة 0 و1 (`RB-001` — `RB-004`): تهيئة نظام المهام والتدقيق الأساسي الشامل
+- **`RB-001` (PASSED):** تم اعتماد لوحة المهام المنظمة في [TASKS.md](TASKS.md) (`RB-001`..`RB-030` + `FINAL-ACCEPTANCE-TEST`).
+- **`RB-002` (PASSED):** تدقيق بيئة VirtualBox و`Rawad-CHR-Lab`:
+  - حالة `Rawad-CHR-Lab`: `running` (`RouterOS 7.25.1 x86_64`, RAM حرة `274.8MiB / 512.0MiB`, قرص حر `64.8MiB / 89.2MiB`, قطاعات الكتابة `736`).
+  - حاوية لوحة الإدارة (`busybox:musl`، رقم `0`): `R - RUNNING` (`memory-high=32.0MiB`, استهلاك فعلي `668.0KiB`, منفذ `8080` داخل `veth-admin` `172.18.0.2`).
+  - الوصول الإداري شغّال بنجاح (`HTTP 200`, `25015 bytes`) عبر `http://192.168.56.2:8088/` وعبر `http://127.0.0.1:8088/`، وSSH مستجيب على `admin@192.168.56.2:22` و`admin@127.0.0.1:2222`.
+  - حالة `RAWAD-WIN10-CLIENT`: `running` على الشبكة الداخلية `RAWAD-LAB`، وتم التقاط لقطة شاشة تؤكد ظهور أيقونة الشبكة مقيدة بـ HotSpot قبل تسجيل الدخول.
+- **`RB-003` (PASSED):** تدقيق `Rawad Test` (`efqsmehqnhuzohzjztni`, PostgreSQL `17.12`) والمستودع:
+  - دوال Edge Functions الثلاث (`admin-api` v14، `portal-auth` v10، `verify-mac` v10) بحالة `ACTIVE` (`portal-auth GET -> 200`، و`verify-mac` / `admin-api` بدون أسرار ترجع `401`).
+  - بيانات الأساس المحمية في `Rawad Test`: `admins=2` (`hashim:site_owner`, `testo:general`)، `users=2` (`test`, `hashim`)، `free_quotas=2`، `sessions=11`، `portal_settings=1`، `Main` و`field-test-preparation` نظيفان على `6f7bc8c` و`verify_system.mjs` ناجح في الفحوص الساكنة.
+- **`RB-004` (PASSED):** الثغرات والملاحظات المرصودة للمعالجة والاختبار في المراحل التالية:
+  1. محاكاة `ARM32` عبر `WSL2`/`QEMU`/Docker Desktop غير متاحة محلياً (`HCS_E_HYPERV_NOT_INSTALLED` وVirtualization/Hyper-V غير مفعّل)، لذا يُصنَّف تشغيل الحاوية على `RB4011` رسمياً كغير مختبر على العتاد الفعلي.
+  2. رُصد تفاوت مهم بين `Rawad-CHR-Lab` (حيث `rawad-lab-block-unverified` يتضمن `hotspot=auth` وأسفل قاعدة `hs-unauth`) وبين `routeros/deploy.rsc` السطر `290` (حيث `cUnverified` يستخدم `place-before=0` دون `hotspot=auth`) — يتطلب اختباراً تجريبياً دقيقاً في `RB-010` للتأكد مما إذا كان يحجب Walled Garden قبل الدخول!
+  3. رُصد في `routeros/preflight.rsc` السطر `29` فحص أسماء قديمة (`rawad-api`, `rawad-api-group`) بدلاً من الأسماء الفعلية (`rawad-verified-prof`, `rawad-gate`, `rawad-sync-revocations`).
+  4. رُصد في `admin/admin.js` السطر `118-120` إظهار أزرار التعطيل والحذف لـ `subordinate` رغم حظرها بالخلفية بـ `HTTP 403` في `admin-api/index.ts`.
+  5. رُصد مدخل ثابت متبقٍّ في قائمة `rawad-verified` على CHR (`192.168.88.250`) وإعداد `use-radius=yes` على `hsprof1` مع مستخدم اختبار قديم في `/user-manager` (`lab30-test`)؛ يجب توثيقه وتنظيف السجل الثابت المتبقي أثناء تهيئة المختبر النظيفة.
+
+### المراحل 2 و3 و4 (`RB-005` — `RB-015`): توسيع مختبر RB4011 ومصفوفة التوافق وتقييم ARM32
+- **`RB-005` — `RB-008` (PASSED):** تم توسيع `Rawad-CHR-Lab` بنسخة احتياطية مسبقة (`chr-backup-before-stage2.rsc`) لإضافة محاكاة 4 شبكات/VLANs داخلية (`br-corp-sim`، `vlan10-mgmt`, `vlan20-staff`, `vlan30-floor1`, `vlan40-floor2`) مع DHCP وعزل كامل لضيوف `bridge` عن `10.0.0.0/8` و`192.168.0.0/16` وحظر DNS port 53 على `ether1` (WAN).
+  - تم التحقق الفعلي من حظر ping ضيوف HotSpot للشبكات الداخلية (`1 packet/60B` محظورة في `input` و`3 packets/180B` محظورة في `forward`) مع بقاء الوصول الإداري لـ Win11 (`192.168.56.2:8088`, `127.0.0.1:8088` HTTP `200`) وWin10 Lab (`192.168.88.1:8088` HTTP `200`) وبوابة HotSpot (`HTTP 200`).
+  - اختبار قطع/استعادة WAN (`RB-007`): قطع `ether1` أسقط جلب CHR من Supabase وبقي Admin UI عبر Host-Only يعمل (`HTTP 200`)، وبعد إعادة الوصل استعاد CHR الاتصال (`HTTP 200`).
+  - توثيق الشبكة الكامل في [LAB-SETUP.md](LAB-SETUP.md).
+- **`RB-009` — `RB-012` (PASSED):** تدقيق سطر بسطر لسكربتات RouterOS وتأكيد سلوك `Walled Garden` HTTPS قبل المصادقة (`WG_NO_REVOKE=200` مقابل خطأ `SChannel 0x80092013` في `curl.exe` الصارم لفحص CRL خارج Walled Garden)، وإثبات الحاجة لإضافة `hotspot=auth` لقاعدة `cUnverified` وعدم موثوقية `place-before=0` دون `print`، وتأليف [RB4011-COMPATIBILITY.md](RB4011-COMPATIBILITY.md) و[ROLLBACK.md](ROLLBACK.md).
+- **`RB-013` — `RB-015` (PASSED):** إثبات حجم `admin/` (`270,596 bytes`) وقياس استهلاك حاوية CHR `x86_64` (`668 KiB` RAM، `~3 MiB` قرص) والتصريح الواضح بأن تشغيل الحاوية على `RB4011 ARM32` **غير متحقق وغير معتمد للإنتاج** مع اعتماد بديل الاستضافة المحلية الساكنة على LAN الشركة (Zero-VPS).
+
+### المراحل 5 و6 و7 (`RB-016` — `RB-026`): الاختبارات الشاملة والأمن والأعطال والأحمال وإصلاح الثغرات
+- **`RB-016` — `RB-021` (PASSED):**
+  - اجتياز 7/7 اختبارات API وأمان حية على `Rawad Test` (`run_stage5_tests.mjs`): دخول الأدوار الثلاثة، قفل RLS على الجداول الخمسة (`HTTP 401`)، تسلسل الصلاحيات (`403` لغير المصرح لهم وحماية `site_owner`)، تنقية `portal_settings`، الحصة المجانية، الحساب المحدود ونقله بين الأجهزة، والحساب المفتوح `ALLOW:UNLIMITED` مع إقرار السحب `ACK`.
+  - اختبار حي كامل على `RAWAD-WIN10-CLIENT` + `Rawad-CHR-Lab`: تسجيل الحصة المجانية (`29m49s` في `rawad-verified`)، الحساب المحدود (`59m43s` + إنترنت `200` + حجب `10.10.20.5`)، الحساب المفتوح (دون `timeout`)، وفصله التلقائي خلال ≤18 ثانية بعد التعطيل مع مسح الجلسات التجريبية واستعادة الأساس (`admins=2`, `users=2`).
+  - اختبار واجهة الإدارة (`192.168.56.2:8088/`) عبر Chromium (`1440x900` و`390x844`): جميع الأصول الستة المحلية `HTTP 200`، خط `Cairo` وRTL دون overflow وصفر أخطاء Console.
+  - اختبارات استعادة الأعطال الخمسة: إيقاف/تشغيل الحاوية (`DOWN -> HTTP 200`)، قطع/وصل شبكة العميل Win10 (`000 -> 200`)، وإعادة تشغيل CHR مع عودة الحاوية (`R - RUNNING`) وHotSpot والمجدول تلقائياً.
+- **`RB-022` — `RB-024` (PASSED):** اختبار أحمال متدرج (`10, 25, 40, 60, 100` طلب متزامن): حققت Edge Functions `100% HTTP 200` حتى `100` طلب متزامن (`52.5–94.3 rps` في الذروة)، بينما ظهر عنق زجاجة متوقع في `BusyBox httpd` أحادي العملية على CHR عند `n=100` (`87/100 HTTP 200`, `13 ERR`) مع تعافٍ فوري بعدها وتنظيف كامل البيانات الاصطناعية.
+- **`RB-025` — `RB-026` (PASSED):**
+  - إضافة `hotspot=auth` لقاعدة `cUnverified` في [routeros/deploy.rsc](routeros/deploy.rsc).
+  - تحديث [routeros/preflight.rsc](routeros/preflight.rsc) لفحص `rawad-verified-prof`, `rawad-gate`, `rawad-sync-revocations`.
+  - إخفاء أزرار التعطيل والحذف نهائياً عن `subordinate` في [admin/admin.js](admin/admin.js) لمطابقة سياسة `admin-api` (`HTTP 403`) مع تحديث النسخة في حاوية CHR (`32382 bytes HTTP 200`).
+  - توسيع [tests/verify_system.mjs](tests/verify_system.mjs) واجتياز كافة فحوص الانحدار والأمان.
+
+### المرحلتان 8 و9 (`RB-027` — `RB-030` + `FINAL-ACCEPTANCE-TEST`): القبول النهائي البارد والجاهزية والإغلاق
+- **`FINAL-ACCEPTANCE-TEST` (PASSED — 17/17):** بعد إيقاف بارد كامل لـ `Rawad-CHR-Lab` و`RAWAD-WIN10-CLIENT` وإقلاعهما من الصفر، عادت الحاوية (`668.0KiB`, `R - RUNNING`) وHotSpot والمجدول تلقائياً، وفتحت Edge في Win10 البوابة محملةً إعدادات Supabase الحية، واجتازت أنواع الحسابات الثلاثة (`Free 29m48s`, `Limited 59m44s`, `Unlimited` دون timeout) والفصل التلقائي بعد التعطيل وعزل الجدار الناري وقطع/استعادة WAN وإعادة تشغيل الحاوية، مع نظافة `Rawad Test` (`admins=2: hashim, testo`, `users=2: test, hashim`) واجتياز `tests/verify_system.mjs`.
+- **التوثيق النهائي الكامل (`RB-027` — `RB-028`):** إصدار [TEST-REPORT.md](TEST-REPORT.md) و[PRODUCTION-READINESS.md](PRODUCTION-READINESS.md) متكاملَين مع [TASKS.md](TASKS.md), [RB4011-COMPATIBILITY.md](RB4011-COMPATIBILITY.md), [LAB-SETUP.md](LAB-SETUP.md), و[ROLLBACK.md](ROLLBACK.md).
+- **الحسم والتزامن (`RB-029` — `RB-030`):** مراجعة `git status`/`git diff` ومسح الأسرار ودفع الفروع `main` و`field-test-preparation` دون `--force` مع مطابقة SHA-1.
