@@ -17,18 +17,17 @@
    ```routeros
    /import file-name=rollback.rsc
    ```
-3. ماذا يفعل `rollback.rsc` بأمان:
+3. ماذا يفعل `rollback.rsc` بأمان (`RB-041`):
    - يتحقق عبر هاشَي سلامة (`rawadStateH1`, `rawadStateH2`, `rawadStateBodyLen`) مقارنةً بـ `rawad-portal-anchor` من عدم العبث بملف الحالة.
    - يفصل الجلسات النشطة المحصورة في `server="rawad-guest-hotspot"` ويزيل عناصر قائمة `rawad-verified` ذات التعليق `rawad-guest-portal` فقط.
-   - يحذف فقط الموارد التي أنشأها النشر (`rawadCreated*=true`): المجدول `rawad-sync-revocations`، قواعد NAT/Firewall/IPv6 الخاصة بـ `ether10`، جدار الحماية الـ Walled Garden `rawad-guest-portal-allow-supabase`، خادم HotSpot `rawad-guest-hotspot` وبروفايلاته والمستخدم `rawad-gate`، خادم واختيار وشبكة ومجمّع DHCP، وعنوان `192.168.20.1/24` على `ether10`.
-   - يستعيد القيم السابقة لـ `allow-remote-requests` والمنطقة الزمنية (`timezone`) وتفعيل عميل `NTP` **فقط إذا كانت مسجلة قبل النشر**.
-   - يحذف `rawad-portal-state` و`rawad-portal-anchor` والمتغيرات العمومية الخاصة بالجلسة.
-   - **يحذف فقط ملف الحالة دون المساس بمنافذ `ether1`–`ether9` أو جسور الشركة أو قواعد WAN/LAN الحالية.**
+   - يحذف فقط الموارد التي أنشأها النشر (`rawadCreated*=true`): قواعد Firewall/NAT/IPv6 الخاصة بـ `ether10`، المجدول `rawad-sync-revocations`، جدار الـ Walled Garden `rawad-guest-portal-allow-supabase`، المستخدم `rawad-gate`، خادم HotSpot `rawad-guest-hotspot` وبروفايلاته، خادم واختيار وشبكة ومجمّع DHCP، وعنوان `192.168.20.1/24` على `ether10` (بتسلسل آمن للتبعيات).
+   - **لا يعدّل إطلاقاً إعدادات `DNS` أو `Clock` أو `NTP` العامة على الراوتر** (لأن `deploy.rsc` لم يعد يمسها أصلاً؛ وبالتالي لا توجد أي مخاطرة بإعادة ضبط إعدادات الشركة عند التراجع).
+   - يحذف `rawad-portal-state` و`rawad-portal-anchor` فقط دون المساس بمنافذ `ether1`–`ether9` أو جسور الشركة أو قواعد WAN/LAN الحالية.
 4. التحقق بعد التراجع:
    ```routeros
    /import file-name=verify.rsc
    ```
-   يجب ألا يُرجع أي موارد نشطة باسم `rawad-guest-*` أو `rawad-verified-prof`.
+   يجب ألا يُرجع أي موارد نشطة باسم `rawad-guest-*` أو `rawad-verified-prof` أو `rawad-sync-revocations`.
 5. **محظورات التراجع على RB4011 الإنتاجي (`RB-036 E`):**
    - **ممنوع** استخدام أوامر مسح شاملة مثل `remove [find]` غير المقيدة على Firewall/NAT/DHCP/HotSpot أو أوامر `/system reset-configuration`.
    - **ممنوع** تنفيذ استعادة ثنائية شاملة `.backup` بطريقة تمس تعديلات لاحقة على `ether1–ether9` دون دراسة مسبقة.

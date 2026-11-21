@@ -62,3 +62,12 @@
 | `RB-038` | Database & Supabase `Rawad Test` Deep Audit | Migrations, schema, RLS, Edge Functions, cleanup summary, unlimited accounts, preserved `admins`/`users`, hardcoded lab inventory audited | `PASSED` (`PASS`) |
 | `RB-039` | Final 20-Row Acceptance Matrix | Full 20-item matrix with exact honest classifications (`PASS / FAIL / BLOCKED / NOT TESTED / CANCELLED`) & concrete evidence | `PASSED` (`PASS`) |
 | `RB-040` | Update All 7 Docs, Verify, Push to GitHub & Deliver Final Report | All 7 markdown docs updated & consistent, `verify_system.mjs` + secret scan pass, non-forced push to `main` & `field-test-preparation`, final report delivered | `PASSED` (`PASS`) |
+
+## Final Review — Production Isolation, Migration Tracking & Full E2E Load (`RB-041` — `RB-044`)
+
+| Task ID | Task Name | Acceptance Criteria | Status |
+| :--- | :--- | :--- | :--- |
+| `RB-041` | Strict `ether10` Production Isolation & Zero Global Mutations | Remove `/ip dns set`, `/system clock set`, `/system ntp client set` from `deploy.rsc` & `rollback.rsc`; add read-only DNS prerequisite ABORT gate; scope `rawad-gate` & `walled-garden` to `server="rawad-guest-hotspot"`; verify with `verify_system.mjs`; mark RB4011 Production `BLOCKED` until field proof | `PASSED` (Scripts/Audit) / **`BLOCKED`** (Prod Rollout) |
+| `RB-042` | Supabase Migration Tracking Analysis & Safe Sync Method | Inspect `pg_namespace` & `supabase migration list --linked`; document root cause (`remote=""`) and safe `migration repair --status applied` procedure without bypassing CLI consent or modifying Production | `PASSED` (`PASS`) |
+| `RB-043` | Full-System E2E Load Test (`10, 25, 40, 60, 100` Users + `25` PBKDF2 Auth) | Run full 5-step user lifecycle + `revoked`/`ACK` batch flow across `10–100` concurrent simulated users + `25` PBKDF2 logins in `Rawad Test`; distinguish HTTP static vs Edge vs Full E2E vs physical RB4011; clean all synthetic data | `PASSED` (`PASS` on `Rawad Test` / HW `NOT TESTED`) |
+| `RB-044` | Update Documentation with Honest Production Blockers, Load Breakdown & Final Report | Sync `PRODUCTION-READINESS.md`, `TEST-REPORT.md`, `RB4011-COMPATIBILITY.md`, `ROLLBACK.md`, `TASKS.md`, `PROGRESS.md`; re-verify & push cleanly without `--force` | `PASSED` (`PASS`) |
