@@ -100,3 +100,9 @@
 | `RB-056` | Run 3 Independent Multi-Process Rounds (`300, 350, 400, 450, 500`) | 15 independent 5-process rounds on `Rawad Test` with CHR scheduler paused, between-round cleanup, zero orphan/duplicate sessions, `P50/P95/P99`, timeout/`429`/`5xx` counts, and strict unchanged timeouts | `PASSED` (`300/350/400` = `3/3`; `450/500` = `0/3`) |
 | `RB-057` | Certify Cloud Auth Capacity vs Safe Margin vs Untested RB4011 | Strictly certify `400` (largest tier passing `3/3` at 100%), set recommended safe operating capacity at `200–250`, and explicitly classify real RB4011 capacity `NOT TESTED` | `PASSED` (`Certified Cloud: 400`; HW `NOT TESTED`) |
 | `RB-058` | Final Documentation Closure (`TASKS`, `PROGRESS`, `TEST-REPORT`, `PRODUCTION-READINESS`) | Document all 15 rounds, 3-way capacity distinction, verify cleanly, commit & push without `--force`, deliver final report | `PASSED` (`PASS`) |
+
+## Production RB4011 Read-Only Field Readiness Audit (`RB-059`)
+
+| Task ID | Task Name | Acceptance Criteria | Status |
+| :--- | :--- | :--- | :--- |
+| `RB-059` | Production `RB4011` Read-Only Field Readiness Audit | Verified Git baseline & absence of real `/export`; authored Read-Only audit command pack, `ether10` vs `ether1–ether9` risk analysis, unexecuted `Safe Mode` rollout & surgical rollback blueprint, and explicit production blockers (`BLOCKED` / `NOT TESTED`) | `PASSED` (Audit & Plan) / **`BLOCKED`** (Prod Rollout) |

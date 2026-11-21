@@ -106,3 +106,111 @@
    ```
 3. نشر Edge Functions الثلاث بأسرار الإنتاج، واستضافة `admin/` ساكناً داخل LAN الموظفين فقط (بدون حاوية RB4011).
 4. تنفيذ [routeros/preflight.rsc](routeros/preflight.rsc) -> مراجعة `/export` و`[B]` و`[C]` و`[D]` وخط الأساس `[F]` -> رفع `hotspot/` -> تنفيذ [routeros/deploy.rsc](routeros/deploy.rsc) و[routeros/verify.rsc](routeros/verify.rsc) -> إتمام اختبارات `ether10` و`ether1–ether9` لرفع حالة `BLOCKED`.
+
+---
+
+## 5. تدقيق الجاهزية الميدانية القرائي لراوتر RB4011 الحقيقي (`RB-059` — Read-Only Field Audit)
+
+> **تنبيه إلزامي:** لم يُعثر في المستودع أو في `scratch/` على ملف `/export` خاص براوتر الشركة الحقيقي `RB4011`، ولم يُنفّذ أي اتصال أو تعديل على راوتر الإنتاج أو Supabase Production. جميع إعدادات RB4011 أدناه تبقى غير مفحوصة ميدانياً ولا يُفترض تطابقها مع `Rawad-CHR-Lab`.
+
+### أ. مصفوفة ما تم التحقق منه مقابل غير المختبر والمحظور (`PASS | FAIL | BLOCKED | NOT TESTED`)
+
+| البند | التصنيف الرسمي | الدليل الملاحظ والموقّع |
+| :--- | :---: | :--- |
+| حالة Git والفروع النظيفة (`main` & `field-test-preparation`) | **`PASS`** | تطابق محلي وعلى `origin` دون تغييرات معلّقة (تحقّق `RB-059`) |
+| انعدام التعديلات العامة في `deploy.rsc` و`rollback.rsc` + حصر `server="rawad-guest-hotspot"` | **`PASS`** | فحوص `verify_system.mjs` الدائمة وتدقيق `RB-041` |
+| القدرة السحابية للمصادقة وإدارة الجلسات (`Rawad Test`) | **`PASS`** (سحابياً فقط) | اعتماد `400` متزامناً (`3/3` في `RB-056`) وهامش `200–250`؛ تشبّع `450`/`500` (`0/3 FAIL`) |
+| توفّر ملف `/export` الفعلي لراوتر الشركة `RB4011` | **`BLOCKED`** | غير متاح في المستودع بعد؛ يتطلب تشغيل أوامر القراءة أدناه من قِبل المشغل |
+| عزل `ether10` الفعلي (`Bridge`, `VLAN`, `RTL8367SB`, `PoE-out`) وسلامة `ether1–ether9` | **`NOT TESTED` / `BLOCKED`** | لا يُثبت عبر CHR؛ مشروط بمراجعة `/export` الفعلي واختبارات الميدان |
+| فحص `DNS allow-remote-requests` وحظر `IPv4 + IPv6 WAN 53` على `RB4011` الفعلي | **`NOT TESTED` / `BLOCKED`** | قد يحظر أو يكشف Open Resolver أو يؤثر على `ether1–ether9` ما لم يُدقَّق مسبقاً |
+| أداء `ARM32`، `/tool fetch` المتزامن، `DHCP Option 114`، وساعة UTC على `RB4011` | **`NOT TESTED`** | يعتمد كلياً على العتاد الحقيقي ومزود الخدمة للشركة |
+| بدء النشر الميداني على راوتر الشركة الإنتاجي | **`BLOCKED`** | ممنوع إطلاقاً حتى توفر `/export` واستيفاء جميع شروط الرفع الميداني |
+
+### ب. قائمة أوامر RouterOS v7 للقراءة فقط (`Read-Only`) لجمع إعدادات `RB4011` الحقيقي
+
+تُنفَّذ عبر WinBox Terminal أو SSH (تُظهر الحقول دون أي تعديل، و`/export` في RouterOS v7 يخفي الكلمات السرية افتراضياً دون `show-sensitive`):
+
+```routeros
+# 1. موارد الجهاز وإصدار RouterOS والحزم ووضع الجهاز
+/system identity print
+/system resource print
+/system routerboard print
+/system package print
+/system device-mode print
+
+# 2. الواجهات والجسور وVLANs وشريحة التبديل RTL8367SB وPoE
+/interface ethernet print detail
+/interface bridge print detail
+/interface bridge port print
+/interface vlan print
+/interface ethernet switch print
+/interface ethernet switch port print
+/interface ethernet poe print
+
+# 3. عناوين IP ومجمّعات وخوادم وشبكات وخيارات DHCP
+/ip address print
+/ip pool print
+/ip dhcp-server print detail
+/ip dhcp-server network print detail
+/ip dhcp-server option print
+
+# 4. إعدادات DNS وقواعد input الخاصة بمنفذ 53 (IPv4 وIPv6)
+/ip dns print
+/ip firewall filter print detail where chain="input"
+/ipv6 firewall filter print detail where chain="input"
+
+# 5. جميع قواعد الجدار الناري وNAT وMangle وIPv6 وقوائم الواجهات
+/ip firewall filter print detail
+/ip firewall nat print detail
+/ip firewall mangle print detail
+/ipv6 firewall filter print detail
+/interface list print
+/interface list member print
+
+# 6. خوادم HotSpot والبروفايلات وWalled Garden (إن وُجدت مسبقاً)
+/ip hotspot print detail
+/ip hotspot profile print detail
+/ip hotspot user profile print detail
+/ip hotspot user print
+/ip hotspot walled-garden print
+
+# 7. المسارات وخدمات الإدارة والشهادات والوقت وNTP
+/ip route print
+/ip service print
+/certificate print
+/system clock print
+/system ntp client print
+
+# 8. تصدير التكوين الكامل منقحاً (دون أسرار في RouterOS v7)
+/export
+```
+*(يمكن أيضاً تشغيل [routeros/preflight.rsc](routeros/preflight.rsc) لأنه قراءة فقط `100%` ومحصور في فحص تعارضات `ether10`.)*
+
+### ج. تحليل العزل والمخاطر والاعتماديات المشتركة (`ether10` مقابل `ether1–ether9`)
+
+1. **خطر `DNS` العام (`allow-remote-requests` + WAN IPv4/IPv6):** رغم حذف `/ip dns set` من `deploy.rsc`، إذا كان `allow-remote-requests=yes` على `RB4011` لأجل `ether10` فإنه يستمع على جميع الواجهات ما لم تحجبه قواعد `input` على IPv4 **و**IPv6 WAN، وقد تتأثر سياسة DNS لمنافذ `ether1–ether9`. أما إذا كان `false` فسيوقف `deploy.rsc` التنفيذ (`ABORT`).
+2. **ترتيب قواعد Firewall وإدراج `place-before=0`:** القواعد الثماني الجديدة مقيدة بـ `in-interface=ether10` (لا تطابق حزم `ether1–ether9`)، لكن وضعها أعلى القائمة (`place-before=0`) قبل `fasttrack-connection` أو قواعد الموظفين يُلزم بمراجعة ترتيب قواعد الراوتر الفعلي عبر `/export` قبل النشر.
+3. **شريحة التبديل `RTL8367SB #2` (`ether6–ether10`)، `Bridge`، و`PoE-out`:** إذا كان `ether10` عضواً في `bridge` مع `ether6–ether9` أو يتشارك VLAN موظفين، فإن فصله أو تفعيل HotSpot عليه قد يكسر حركة VLAN أو يؤثر على `hardware-offload` أو يقطع تغذية `PoE-out` عن Access Point قائم.
+4. **تداخل `DHCP` / `192.168.20.0/24` / `Routing` / `NAT`:** يجب إثبات خلو الشبكة وجدول المسارات وأنفاق VPN للشركة من `192.168.20.0/24`، والتأكد أن `masquerade` الموجودة في الشركة لن تتعارض مع `rawad-guest-portal-nat` (`src-address=192.168.20.0/24 dst-address=!192.168.0.0/16`).
+5. **خوادم HotSpot السابقة ودقة ساعة UTC:** إن وُجد خادم HotSpot مسبق على واجهة أخرى فقد تتداخل سياسات DNS/HTTP ما لم يكن معزولاً، كما أن عدم دقة ساعة الراوتر (التي لم يعد السكربت يغيّرها) يُفشل التحقق من شهادة TLS لـ Supabase.
+
+### د. خطة النشر والتراجع المستقبلية (خطة غير منفذة لنافذة الصيانة فقط)
+
+- **المتطلبات السابقة قبل مجرد البدء:** استلام ومراجعة `/export` الفعلي + حل جميع ملاحظات العزل `[ج]` + تجهيز قاعدة ودوال Supabase Production بمفاتيح إنتاجية + استضافة `admin/` ساكناً داخل شبكة LAN الموظفين (دون حاوية RB4011).
+- **النسخ الاحتياطي الإلزامي (قبل أي لمس):**
+  - على `RB4011`: `/export file=rb4011-pre-rawad-backup` و`/system backup save name=rb4011-pre-rawad-backup` ونقلهما خارج الراوتر.
+  - على Supabase Production: نسخة `pg_dump` ثلاثية (`Roles`, `Schema`, `Data`) عبر PG 17.
+- **خطوات التنفيذ المرتّبة باستعمال `Safe Mode`:**
+  1. تسجيل خط الأساس على حاسوب اختبار متصل بـ `ether1–ether9` (`ping` مستمر `0% loss`, فحص `DNS/HTTP/HTTPS`, `ipconfig /renew`).
+  2. رفع مجلد `hotspot/` (المعدّل لرابط ومفتاح Supabase Production) وملفات `routeros/`.
+  3. تشغيل [routeros/preflight.rsc](routeros/preflight.rsc) والتأكد من عدم ظهور أي `CONFLICT` أو `ABORT_CONDITION`.
+  4. **تفعيل `Safe Mode`** في Terminal (`Ctrl+X`) أو زر `Safe Mode` في WinBox لضمان التراجع الفوري عند انقطاع الاتصال الإداري.
+  5. تشغيل `/import file-name=deploy.rsc` على `ether10` فقط.
+  6. التحقق قبل إغلاق `Safe Mode`: تشغيل [routeros/verify.rsc](routeros/verify.rsc)، اختبار ضيف حي على `ether10` (`Free` + `Limited` + `Unlimited` + `Fail-Closed` + حجب `ether1–ether9`)، وإعادة قياس `ether1–ether9` (`0%` تأثر في الإنترنت وDNS وDHCP). عند النجاح فقط يُغلق `Safe Mode`، وعند أي خلل يُنفّذ التراجع أو يُسقط `Safe Mode`.
+- **خطة التراجع الجراحية (`rollback.rsc` فقط):** تشغيل `/import file-name=rollback.rsc` الذي يفصل جلسات `rawad-guest-hotspot` النشطة ويزيل الموارد ذات `rawadCreated*=true` من `rawad-portal-state` فقط دون أي مساس بـ `DNS`/`Clock`/`NTP` أو `ether1–ether9`، ثم التحقق عبر [routeros/verify.rsc](routeros/verify.rsc) ومراقبة `ether1–ether9`. (يُمنع `remove [find]` دون قيد أو `system reset-configuration`).
+
+### هـ. ما يمنع الانتقال إلى النشر الآن بصورة صريحة
+1. **عدم توفر ملف `/export` الحقيقي ومخرجات القراءة من `RB4011` الشركة.**
+2. **عدم إثبات خلو `ether10` من عضوية `Bridge`/`VLAN`/`RTL8367SB` وغياب خطة `PoE-out` الميدانية.**
+3. **عدم تدقيق وضع `/ip dns allow-remote-requests` وحجب `IPv4 + IPv6 WAN 53` وساعة `UTC` على الراوتر الفعلي.**
+4. **عدم إجراء اختبارات عدم التأثير الفعلية على `ether1–ether9` وأداء `ARM32` في الموقع.**

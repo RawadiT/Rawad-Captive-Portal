@@ -200,3 +200,12 @@
     - **`500`:** `0/3` (`427/500`, `397/500`, `427/500` — إخفاقات `UND_ERR_CONNECT_TIMEOUT` في `step_freeAuth`: `73`, `103`, `73`، وصفر `429`/`5xx`).
   - تحقّق `dup=0`, `remainingActiveBeforeDelete=0`, `orphan=0` في جميع الجولات الـ15، وبقي الأساس نظيفاً (`admins=2`, `users=2`, `rem=0`).
 - **`RB-057` و`RB-058` (`PASS` للتوثيق والاعتماد):** اعتماد **`400` مستخدماً متزامناً** كـ **سعة سحابية مختبرة ومعتمدة (`3/3`)**، وتثبيت **`200–250`** كـ **سعة تشغيلية مقترحة آمنة**، والتصريح أن سعة **`RB4011` الحقيقي ما زالت `NOT TESTED`** (ونشر الإنتاج **`BLOCKED`**)، مع تحديث [TASKS.md](TASKS.md), [PROGRESS.md](PROGRESS.md), [TEST-REPORT.md](TEST-REPORT.md), و[PRODUCTION-READINESS.md](PRODUCTION-READINESS.md).
+
+---
+
+## تدقيق الجاهزية الميدانية القرائي لراوتر RB4011 الحقيقي (`RB-059`) — 2026-11-21
+
+- **`RB-059` (`PASS` للتدقيق والخطط / النشر الفعلي يبقى `BLOCKED` و`NOT TESTED` عتادياً):**
+  - التحقق من استقرار Git (`31b6cea` على `main` و`field-test-preparation`, Working Tree نظيف) ومن عدم وجود `/export` فعلي لـ `RB4011` داخل المستودع أو `scratch/`.
+  - توثيق حزمة أوامر RouterOS v7 القرائية فقط (`Read-Only`) لجرد الواجهات و`Bridge`/`VLAN`/`RTL8367SB`/`PoE-out` و`DHCP`/`DNS`/`Firewall` (IPv4+IPv6)/`HotSpot`/`Routes`/`Clock`/`NTP`/`/export` دون أي تعديل على الراوتر أو Supabase Production.
+  - تحليل الاعتماديات المشتركة (`DNS`, ترتيب `place-before=0`, `RTL8367SB`, تداخل `192.168.20.0/24`/NAT, دقة ساعة UTC) وتوثيق خطة نافذة الصيانة المستقبلية غير المنفذة باستخدام النسخ الاحتياطي المزدوج و**`Safe Mode`** والتراجع الجراحي عبر [routeros/rollback.rsc](routeros/rollback.rsc) في [PRODUCTION-READINESS.md](PRODUCTION-READINESS.md).
