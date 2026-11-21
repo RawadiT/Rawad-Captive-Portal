@@ -214,3 +214,5 @@
 2. **عدم إثبات خلو `ether10` من عضوية `Bridge`/`VLAN`/`RTL8367SB` وغياب خطة `PoE-out` الميدانية.**
 3. **عدم تدقيق وضع `/ip dns allow-remote-requests` وحجب `IPv4 + IPv6 WAN 53` وساعة `UTC` على الراوتر الفعلي.**
 4. **عدم إجراء اختبارات عدم التأثير الفعلية على `ether1–ether9` وأداء `ARM32` في الموقع.**
+
+*(وثّقت مراجعة المزامنة النهائية `RB-060` في [DEPLOYMENT.md](DEPLOYMENT.md) و[README.md](README.md) و[TASKS.md](TASKS.md) و[PROGRESS.md](PROGRESS.md) مع الإبقاء التام على حالة النشر الفعلي **`BLOCKED`**.)*

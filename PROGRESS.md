@@ -209,3 +209,6 @@
   - التحقق من استقرار Git (`31b6cea` على `main` و`field-test-preparation`, Working Tree نظيف) ومن عدم وجود `/export` فعلي لـ `RB4011` داخل المستودع أو `scratch/`.
   - توثيق حزمة أوامر RouterOS v7 القرائية فقط (`Read-Only`) لجرد الواجهات و`Bridge`/`VLAN`/`RTL8367SB`/`PoE-out` و`DHCP`/`DNS`/`Firewall` (IPv4+IPv6)/`HotSpot`/`Routes`/`Clock`/`NTP`/`/export` دون أي تعديل على الراوتر أو Supabase Production.
   - تحليل الاعتماديات المشتركة (`DNS`, ترتيب `place-before=0`, `RTL8367SB`, تداخل `192.168.20.0/24`/NAT, دقة ساعة UTC) وتوثيق خطة نافذة الصيانة المستقبلية غير المنفذة باستخدام النسخ الاحتياطي المزدوج و**`Safe Mode`** والتراجع الجراحي عبر [routeros/rollback.rsc](routeros/rollback.rsc) في [PRODUCTION-READINESS.md](PRODUCTION-READINESS.md).
+- **`RB-060` (`PASS` للمراجعة والمزامنة / النشر الإنتاجي يبقى `BLOCKED`):**
+  - تدقيق كامل المستودع (`45` ملفاً متتبعاً في Git، `0` محذوفات، `1` ملف مؤرشف مسبقاً في [docs/archive/FIELD_TEST.md](docs/archive/FIELD_TEST.md)، وتجاهل `supabase/.temp/` فقط) والتحقق من تطابق الفرعين `main` و`field-test-preparation` محلياً وعلى `origin`.
+  - تحديث [DEPLOYMENT.md](DEPLOYMENT.md) و[README.md](README.md) لعكس حالة الإنتاج `BLOCKED`، خطوات `preflight.rsc` و`Safe Mode`، استضافة `admin/` داخل LAN، السعة السحابية المعتمدة (`400` / هامش `200–250`)، وفهرس الوثائق، ثم فحص الروابط و`verify_system.mjs` والأسرار والرفع دون `--force`.

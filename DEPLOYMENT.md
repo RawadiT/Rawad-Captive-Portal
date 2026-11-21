@@ -1,20 +1,26 @@
 # DEPLOYMENT.md — دليل النشر (MikroTik HotSpot + Supabase)
 
+> **حالة النشر الإنتاجي الآن (`RB-059` / `RB-060`):** **`BLOCKED`** — يُمنع البدء بالنشر على راوتر الشركة الحقيقي **RB4011** قبل استلام ومراجعة `/export` الفعلي، تدقيق عزل `ether10` و`IPv4 + IPv6 WAN DNS 53`، واجتياز اختبارات عدم التأثير على `ether1–ether9` (راجع [PRODUCTION-READINESS.md](PRODUCTION-READINESS.md)).  
+> **النطاق الرسمي:** يقتصر النظام على المصادقة، فحص `MAC`/الصلاحيات، منح وإلغاء وصول HotSpot، مزامنة `Revocation`/`ACK`، ولوحة الإدارة فقط دون إدارة سرعة الإنترنت أو `Bandwidth`.
+
 1. **إعداد Supabase:**
-   - نفّذ [supabase/schema.sql](supabase/schema.sql) في مشروع Supabase (آمن لإعادة التطبيق دون حذف البيانات).
+   - نفّذ [supabase/schema.sql](supabase/schema.sql) في مشروع Supabase (آمن لإعادة التطبيق دون حذف البيانات)، أو طبّق مجلد [supabase/migrations/](supabase/migrations/) عبر `npx supabase db push` على مشروع جديد.
+   - إذا طُبّق المخطط مباشرة عبر `psql`/SQL، زامن سجل التتبع ميتاداتياً دون إعادة تطبيق التغييرات عبر: `npx supabase migration repair --status applied 202611180001 202611180002 202611190001 --remote`.
    - انشر Edge Functions الثلاث: `portal-auth`, `verify-mac`, `admin-api`.
    - اضبط الأسرار على Supabase (`ROUTER_SHARED_SECRET`, `ADMIN_TOKEN_SECRET`).
-   - أضف حساب المدير الأول في `public.admins` بتوليد تجزئة `pbkdf2:<salt_hex>:<hash_hex>` (عبر دالة `hashPassword` في `_shared/crypto.ts`) وإدراجها في `public.admins`.
+   - أضف حساب المدير الأول في `public.admins` بتوليد تجزئة `pbkdf2:<salt_hex>:<hash_hex>` (عبر دالة `hashPassword` في [supabase/functions/_shared/crypto.ts](supabase/functions/_shared/crypto.ts)) وإدراجها في `public.admins`.
 
 2. **إعداد ملفات الواجهة والإدارة:**
-   - حدّث `supabaseUrl` و`supabaseAnonKey` في [hotspot/login.html](hotspot/login.html) و[admin/index.html](admin/index.html) (لا تضع `service_role` أو `ROUTER_SHARED_SECRET` أبداً في المتصفح).
+   - حدّث `supabaseUrl` و`supabasePublishableKey` في [hotspot/login.html](hotspot/login.html) و[hotspot/status.html](hotspot/status.html)، وحدّث `supabaseUrl` و`supabaseAnonKey` في [admin/index.html](admin/index.html) (لا تضع `service_role` أو `ROUTER_SHARED_SECRET` أبداً في المتصفح).
    - ارفع محتويات `hotspot/` إلى مجلد `hotspot` داخل MikroTik.
-   - افتح [admin/index.html](admin/index.html) محلياً أو استضف مجلد `admin/` كملفات ثابتة (بدون Vercel/VPS).
+   - استضف مجلد `admin/` كملفات ساكنة داخل **شبكة الموظفين الداخلية (`LAN`) فقط** أو افتح [admin/index.html](admin/index.html) محلياً من جهاز إدارة موثوق (بدون Vercel/VPS ودون تشغيل حاوية على RB4011).
 
 3. **إعداد MikroTik (`ether10` فقط):**
-   - عدّل `:local supabaseHost` و`:local routerSecret` في [routeros/deploy.rsc](routeros/deploy.rsc).
-   - نفّذ `deploy.rsc`، ثم تحقق عبر [routeros/verify.rsc](routeros/verify.rsc).
-   - للتراجع الآمن: نفّذ [routeros/rollback.rsc](routeros/rollback.rsc).
+   - خذ أولاً نسخاً احتياطية خارج الراوتر (`/export` و`/system backup save`).
+   - شغّل الفحص القرائي [routeros/preflight.rsc](routeros/preflight.rsc) وتأكد من انعدام أي `CONFLICT` أو `ABORT_CONDITION` ومن ثبات `ether1–ether9`.
+   - عدّل `:local supabaseHost` و`:local routerSecret` في [routeros/deploy.rsc](routeros/deploy.rsc). **ملاحظة حرجة:** لا يعدّل `deploy.rsc` إعدادات `/ip dns` أو `/system clock` أو `/system ntp client` العامة نهائياً، ويتوقف (`ABORT`) إذا كان `/ip dns allow-remote-requests=false` أو تعذّر إثبات حجب `WAN TCP/UDP 53`.
+   - فعّل **`Safe Mode`** قبل التنفيذ، نفّذ `deploy.rsc`، ثم تحقق عبر [routeros/verify.rsc](routeros/verify.rsc) وفحوص عدم تأثر `ether1–ether9` قبل إغلاق `Safe Mode`.
+   - للتراجع الجراحي الآمن (المحصور في موارد `ether10` دون مساس بالإعدادات العامة): نفّذ [routeros/rollback.rsc](routeros/rollback.rsc).
 
 4. **ملاحظات أمنية وتشغيلية مهمة:**
    - **تعطيل المستخدم المتصل:** لأن الراوتر خلف NAT ولا يفتح منافذ إدارة، يقوم مجدول `rawad-sync-revocations` بسحب الجلسات المعطلة/المنتهية من `verify-mac?action=revoked` كل 30 ثانية (حد أقصى 30 ثانية لقطع جلسة مستخدم عُطّل أثناء اتصاله).

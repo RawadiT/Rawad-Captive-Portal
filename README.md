@@ -13,3 +13,11 @@
 - **`routeros/`**: سكربتات RouterOS v7 (`preflight.rsc`, `deploy.rsc`, `verify.rsc`, `rollback.rsc`) لنشر وإدارة `ether10` فقط دون تعديلات عامة.
 - **`tests/`**: اختبارات النظام الدائمة (`verify_system.mjs`).
 - **`docs/archive/`**: أرشيف الوثائق التاريخية المستبدلة (مثل `FIELD_TEST.md`).
+
+## الحالة الراهنة (`RB-060`)
+- **النشر الإنتاجي على `RB4011` الحقيقي:** **`BLOCKED`** — عتاد `RB4011` الحقيقي لم يُختبر بعد (`NOT TESTED`) وبانتظار تدقيق `/export` الفعلي وفحوص `ether1–ether9` الميدانية.
+- **السعة السحابية المعتمدة للمصادقة (`Rawad Test` — `RB-056` / `RB-057`):** **`400` مستخدم متزامن** (`3/3` جولات `100%`)، مع **هامش تشغيل مقترح `200–250` مستخدماً متزامناً**.
+
+## فهرس الوثائق الأساسية
+- [DEPLOYMENT.md](DEPLOYMENT.md) | [PRODUCTION-READINESS.md](PRODUCTION-READINESS.md) | [TEST-REPORT.md](TEST-REPORT.md) | [RB4011-COMPATIBILITY.md](RB4011-COMPATIBILITY.md)
+- [LAB-SETUP.md](LAB-SETUP.md) | [ROLLBACK.md](ROLLBACK.md) | [TASKS.md](TASKS.md) | [PROGRESS.md](PROGRESS.md)
