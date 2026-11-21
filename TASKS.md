@@ -83,3 +83,12 @@
 | `RB-049` | Repository Organization & Scope Clarification (`README.md`) | Updated `README.md` with explicit Auth-only Scope Clarification & `docs/archive/`, separated scratch outputs cleanly outside repo | `PASSED` (`PASS`) |
 | `RB-050` | Full Post-Cleanup Regression & Functionality Verification | Verified `verify_system.mjs`, `run_stage5_tests.mjs` (`7/7`), all 6 Admin UI assets `HTTP 200`, CHR `hotspot/`, `.github/workflows/`, secret scan (`GREP_EXIT=1`) & clean DB | `PASSED` (`PASS`) |
 | `RB-051` | Final Update of All Docs, Git Sync, Push & 11-Point Report | Updated `TASKS`, `PROGRESS`, `TEST-REPORT`, `PRODUCTION-READINESS`; verified after last edit; non-forced push to `main` & `field-test-preparation`; delivered 11-point report | `PASSED` (`PASS`) |
+
+## Final Capacity Investigation, Proven Limits & Cleanliness Audit (`RB-052` — `RB-055`)
+
+| Task ID | Task Name | Acceptance Criteria | Status |
+| :--- | :--- | :--- | :--- |
+| `RB-052` | Investigate 500-User Failure (Calibrated Single vs Multi-Process `350–500`) | Calibrated `127.0.0.1` (`232/500` 1-proc `ECONNREFUSED` vs `500/500` 5-proc); ran `350/400/450/500` in 1-proc & 5-proc against `Rawad Test`; logged exact `UND_ERR_CONNECT_TIMEOUT` per step; 0 orphan/duplicate sessions | `PASSED` (`350` 1-proc / `400` 5-proc stable; `500` `INCONCLUSIVE/UNSTABLE` despite `500/500` isolated burst) |
+| `RB-053` | Establish Proven Operational Capacity & Safety Margin | Documented highest consistent `100%` tier (`350` 1-proc / `400` 5-proc), error onset (`400` 1-proc / `450` cumulative 5-proc), `P50/P95/P99`, `pg_stat_database`, and conservative `200–250` auth safety margin (RB4011 HW `NOT TESTED`) | `PASSED` (`PASS`) |
+| `RB-054` | Final Repository Cleanliness & Reference Integrity Verification | Verified all HTML/CSS local assets (`EXISTS`), intentional SHA-256 duplicates (`admin/` vs `hotspot/`), zero untracked non-ignored files (`!! supabase/.temp/` only), external `scratch/` preserved | `PASSED` (`PASS`) |
+| `RB-055` | Final Acceptance Gate & Doc Sync (`verify_system.mjs`, Secret Scan, DB, UI) | Re-verified `verify_system.mjs` (static pass / PG local skipped), secret scan (`GREP_EXIT=1`), `Rawad Test` clean DB (`admins=2`, `users=2`, `rem=0`), live Admin UI `HTTP 200`, clean Git sync & push | `PASSED` (`PASS`) |
