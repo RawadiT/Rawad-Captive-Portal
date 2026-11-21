@@ -210,3 +210,53 @@
 - **تفصيل الخطوات الخمس عند `n=100` (مجاني E2E):** `step1_portalSettingsGet` (`100/100`, `p50=560ms`, `max=1162ms`), `step2_freeQuotaAuth` (`100/100`, `p50=386ms`, `max=907ms`), `step3_verifyMac` (`100/100`, `p50=374ms`, `max=840ms`), `step4_sessionStatus` (`100/100`, `p50=366ms`, `max=987ms`), `step5_logout` (`100/100`, `p50=362ms`, `max=946ms`).
 - **ملاحظة التنافس المرصودة (`task-1647`, `task-1660`):** عند تشغيل `run_full_e2e_load.mjs` بالتوازي مع بقاء مجدول `rawad-sync-revocations` (كل `15s`) نشطاً على `Rawad-CHR-Lab` ضد نفس قاعدة `Rawad Test`، استبق المجدول وأرسل `ACK` لأقدم 10 جلسات فظهر `30/40` في الأولى و`ACK:0` في الدفعة #0 (`50/60`) في الثانية؛ وبعد إيقاف المجدول مؤقتاً أثناء `task-1670` (وإعادة تفعيله في `finally`) اجتازت جميع الدفعات **`100%`** — ما يثبت وجوب تخصيص مشروع Supabase مستقل لكل راوتر إنتاجي دون مشاركة نفس `ROUTER_SHARED_SECRET`.
 - **التحقق بعد التنظيف:** استُعيد الأساس نظيفاً (`admins=2`, `users=2`, `rem_quotas=0`, `rem_sessions=0`, `rem_users=0`).
+
+---
+
+## 11. توضيح النطاق، اختبار سعة المصادقة (`10–500`)، تحسين التوسع، والتنظيف الآمن (`RB-045` — `RB-050`)
+
+### أ. تصحيح نطاق المشروع الرسمي (`Scope Clarification`)
+يقتصر **Rawad Captive Portal** على وظائف المصادقة والصلاحيات وإدارة الجلسات (`Portal Login`, `MAC Verification`, `Free/Limited/Unlimited Accounts`, `Session Status`, `Revocation/ACK Sync`, و`Admin RBAC UI`). جميع مهام قياس سرعة الإنترنت أو توزيع/تقييد `Bandwidth` أو `DPI`/البث تقع **خارج نطاق المشروع** ولم يُضَف لها أي كود أو اختبار.
+
+### ب. تحسينات التوسع والاستقرار المُنفّذة والمُتحقق منها (`RB-046`)
+1. **إعادة استخدام عميل Supabase في Edge Functions:** إنشاء دالة `getDb()` كـ singleton على مستوى العقدة المعزولة (isolate) داخل [supabase/functions/portal-auth/index.ts](supabase/functions/portal-auth/index.ts)، [supabase/functions/verify-mac/index.ts](supabase/functions/verify-mac/index.ts)، و[supabase/functions/admin-api/index.ts](supabase/functions/admin-api/index.ts) ونشرها على `Rawad Test` (`efqsmehqnhuzohzjztni`).
+2. **فهارس جزئية في [supabase/schema.sql](supabase/schema.sql):** إضافة وتطبيق `idx_sessions_pending_revocations` (لتسريع `get_revoked_sessions`) و`idx_sessions_active_expires` (لتسريع كشف انتهاء الجلسات النشطة) مع تأكيد ظهورهما في `pg_indexes` على `Rawad Test`.
+
+### ج. نتائج اختبار سعة المصادقة وإدارة الجلسات (`RB-045`: `10` حتى `500` متزامن — `rb045_capacity_results.json`)
+
+قيس التدفق المتكامل لكل مستخدم متزامن (`POST free` -> `GET verify-mac` -> `POST session_status` -> `POST logout` -> `GET verify-mac?action=revoked` + دفعات `ACK` كل 10) في `Rawad Test` مع مجدول CHR متوقفاً مؤقتاً ثم مُعاد تفعيله في `finally`:
+
+| التزامن (`n`) | النجاح / الفشل | `RPS` | `P50` | `P95` | `P99` | `max` | إجمالي الزمن | مزامنة السحب + `ACK` | `Runner RSS` / `CHR CPU` |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- | :---: |
+| **10** | **`10/10`** (`0` فشل) | `2.35` | `3293ms` | `4242ms` | `4242ms` | `4242ms` | `4262ms` | `10/10` (`1` دفعة، `1291ms`, `ok=true`) | `76.6 MB` / `0%` |
+| **25** | **`25/25`** (`0` فشل) | `7.27` | `2515ms` | `3236ms` | `3438ms` | `3438ms` | `3439ms` | `25/25` (`3` دفعات، `1510ms`, `ok=true`) | `82.1 MB` / `0%` |
+| **40** | **`40/40`** (`0` فشل) | `10.99` | `2654ms` | `3208ms` | `3637ms` | `3637ms` | `3640ms` | `40/40` (`4` دفعات، `1811ms`, `ok=true`) | `91.8 MB` / `0%` |
+| **60** | **`60/60`** (`0` فشل) | `22.04` | `2086ms` | `2668ms` | `2718ms` | `2718ms` | `2722ms` | `60/60` (`6` دفعات، `2507ms`, `ok=true`) | `105.4 MB` / `0%` |
+| **100** | **`100/100`** (`0` فشل) | `36.79` | `2118ms` | `2640ms` | `2707ms` | `2714ms` | `2718ms` | `100/100` (`10` دفعات، `7289ms`, `ok=true`) | `125.0 MB` / `0%` |
+| **150** | **`150/150`** (`0` فشل) | `38.97` | `2509ms` | `3083ms` | `3200ms` | `3847ms` | `3849ms` | `150/150` (`15` دفعة، `6968ms`, `ok=true`) | `141.9 MB` / `0%` |
+| **200** | **`200/200`** (`0` فشل) | `50.10` | `2893ms` | `3427ms` | `3782ms` | `3986ms` | `3992ms` | `200/200` (`20` دفعة، `7983ms`, `ok=true`) | `158.0 MB` / `0%` |
+| **300** | **`300/300`** (`0` فشل) | **`57.58`** | `4321ms` | `4765ms` | `4917ms` | `5204ms` | `5210ms` | **`300/300`** (`30` دفعة، `11887ms`, `ok=true`) | `82.4 MB` / `0%` |
+| **500** | **`191/500`** (`309` فشل) | `49.28` | `10106ms` | `10125ms` | `10126ms` | `10128ms` | `10145ms` | `191/191` (`20` دفعة، `10190ms`, `ok=true`) | `175.8 MB` / `0%` |
+
+- **أقصى مستوى اجتاز 100% فعلياً:** **`300` مستخدم متزامن** (`300/300` بصفر أخطاء، ارتفاع الإنتاجية إلى `57.58 rps`؛ كما تحسن أداء `n=100` بعد `RB-046` من `32.93 rps`/`3033ms max` إلى `36.79 rps`/`2714ms max`).
+- **تحليل نقطة الاختناق عند `500` متزامن (`Fail-Closed` سليم):** جميع الـ `309` إخفاقات وقعت في الخطوة الأولى `step_freeAuth` خطأ شبكة `TypeError` عند `~10,106–10,128ms` (مهلة فتح `connectTimeout` الافتراضية البالغة 10 ثوانٍ عند فتح 500 اتصال TLS متزامن من نفس المصدر نحو بوابة Edge/Cloudflare). وبفضل منطق Fail-Closed لم تُنشأ أي جلسة جزئية أو مكسورة (`revAck=191/191`, `rem_sessions=0`).
+- **اختبارات الحالات الحدّية والتسابق (`PASS`):**
+  1. **تكرار الطلبات المتزامنة (20 طلب `free` في لحظة واحدة لنفس `MAC`):** `20/20 HTTP 200`، وبفحص SQL بقيت **جلسة نشطة واحدة بالضبط (`1`)** وسجل حصة واحد (`1`) بفضل القفل الاستشاري والفهرس الفريد `idx_sessions_one_active_mac`.
+  2. **الحساب المنتهي والحصة المستنفدة:** رجعا **`HTTP 403`** في `portal-auth` و**`403 DENY:not_authorized`** في `verify-mac`.
+  3. **حراس المصادقة:** `MAC` غير مسجل `403 DENY:not_authorized`، وسر خاطئ `401 DENY:unauthorized`.
+
+### د. مراجعة استهلاك موارد MikroTik (`RB-047`)
+- **قياسات `Rawad-CHR-Lab` (`x86_64`، `7.25.1`):** الذاكرة الحرة بقيت `267.8–268.4 MiB / 512.0 MiB` (`uptime 1h38m45s`, `cpu-load: 0%`), إجمالي قواعد `filter = 25` و`nat = 21`, حاوية BusyBox الاختبارية (`1300.0 KiB`)، والمجدول `rawad-sync-revocations` (بفاصل `15s` بالمختبر و`30s` في `deploy.rsc` عبر دفعات `ACK` حجم 10).
+- **السقوف المعمارية في [routeros/deploy.rsc](routeros/deploy.rsc) لـ `ether10` فقط:** مجمع DHCP `192.168.20.10-192.168.20.250` (`241` عنواناً كحد أقصى للشبكة `/24`)، `shared-users=250`، 7 قواعد IPv4 + 2 IPv6 + قاعدة NAT واحدة، دون استضافة لوحة الإدارة على الراوتر الإنتاجي (`0` أثر على `512 MiB NAND`).
+- **تنويه صريح:** أقصى عدد جلسات HotSpot متزامنة ومعدل `/tool fetch` على **`MikroTik RB4011 ARM32`** الحقيقي يبقى **`NOT TESTED`** دون اختبار ميداني على العتاد الفعلي.
+
+### هـ. جرد التنظيف الآمن والتنظيم (`RB-048`, `RB-049`) — `45` ملفاً متتبعاً في Git
+- **`KEEP` (`44` ملفاً أساسياً):** [README.md](README.md), [TASKS.md](TASKS.md), [PROGRESS.md](PROGRESS.md), [TEST-REPORT.md](TEST-REPORT.md), [PRODUCTION-READINESS.md](PRODUCTION-READINESS.md), [RB4011-COMPATIBILITY.md](RB4011-COMPATIBILITY.md), [LAB-SETUP.md](LAB-SETUP.md), [ROLLBACK.md](ROLLBACK.md), [DEPLOYMENT.md](DEPLOYMENT.md), [.gitignore](.gitignore), [.github/workflows/system-test.yml](.github/workflows/system-test.yml), ملفات `admin/` (6 ملفات), ملفات `hotspot/` (11 ملفاً), ملفات `routeros/` (4 ملفات), ملفات `supabase/` المتتبعة (11 ملفاً تشمل `schema.sql`, `config.toml`, `.gitignore`, 4 ملفات Functions, 3 ملفات Migrations, و1 ملف Rollback), و[tests/verify_system.mjs](tests/verify_system.mjs).
+- **`ARCHIVE` (`1` ملف):** نقل `FIELD_TEST.md` القديم (الذي كان يشير إلى `postgres:16`) عبر `git mv` إلى [docs/archive/FIELD_TEST.md](docs/archive/FIELD_TEST.md) مع `0` مراجع مكسورة (`git grep -n "FIELD_TEST"`).
+- **`DELETE` (`0` ملفات داخل المستودع):** لم يتطلب حذف أي ملف متتبع لأن جميع مخرجات الاختبار واللقطات معزولة خارج المستودع في مجلد `scratch/`، ولا توجد مجلدات فارغة (`0`). (مجلد `supabase/.temp/` متجاهل محلياً عبر `supabase/.gitignore` ولا يُرفع إلى Git).
+
+### و. اختبارات الانحدار بعد التنظيف والتحسين (`RB-050`)
+- **`node tests/verify_system.mjs`:** `ALL SYSTEM VERIFICATIONS PASSED` (تخطّى قسم PG المحلي صراحةً `SKIPPED: No local PostgreSQL test instance available`).
+- **`run_stage5_tests.mjs` (ضد `Rawad Test` المحدّث):** **`7/7 PASS`** (`RB-017/A` الأدوار الثلاثة، `RB-018/RLS` قفل `401`، `RB-018/ROLES` صلاحيات ومنع `site_owner`، `RB-017/PS` تنقية ورفض `400`، `RB-016/FREE`، `RB-016/LIM`، `RB-016/UNLIM` + `ACK:3`).
+- **فحص لوحة الإدارة الحية (`http://192.168.56.2:8088/`):** جميع الأصول الستة (`/`, `/style.css`, `/admin.js`, `/assets/logo.png`, خطا Cairo) عادت `HTTP 200` (`28520`, `23015`, `32382`, `122435`, `30712`, `33644` بايت).
+- **فحص HotSpot CHR، Workflow، الأسرار، وDB:** خادم `hotspot1` وملفات `hotspot/` سليمة على CHR، ملف [.github/workflows/system-test.yml](.github/workflows/system-test.yml) سليم، فحص الأسرار أعاد `GREP_EXIT=1` (`0` تسريب)، وقاعدة `Rawad Test` نظيفة (`admins=2: hashim:site_owner, testo:general`, `users=2: hashim, test`, `rem_test_sessions=0`).

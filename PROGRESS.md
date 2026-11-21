@@ -158,3 +158,19 @@
   - بالتشغيل المعزول (`task-1670` — إيقاف المجدول مؤقتاً ثم إعادة تفعيله) اجتازت جميع المستويات **`100% E2E`**: الحصة المجانية عبر `10, 25, 40, 60, 100` مستخدم متزامن (`GET portal-auth` -> `POST free` -> `verify-mac` -> `session_status` -> `logout` -> `revoked` + `ACK` دفعات من `10`) عند `n=100`: `100/100 E2E OK` (`32.93 rps`, `p50=2220ms`, `p95=2757ms`, `max=3033ms`) + `100/100 ACK` في `3846ms`، بالإضافة إلى `25/25` تسجيل دخول متزامن بـ `PBKDF2` (`p50=2173ms`, `max=2820ms`, `revAck=25/25`).
   - نظافة كاملة بعد التشغيل: `admins=2`, `users=2`, `rem_quotas=0`, `rem_sessions=0`, `rem_users=0`.
 - **`RB-044` (`PASS`):** تحديث جميع التقارير ([PRODUCTION-READINESS.md](PRODUCTION-READINESS.md), [TEST-REPORT.md](TEST-REPORT.md), [RB4011-COMPATIBILITY.md](RB4011-COMPATIBILITY.md), [ROLLBACK.md](ROLLBACK.md), [TASKS.md](TASKS.md), [PROGRESS.md](PROGRESS.md)) وتثبيت حالة النشر الإنتاجي رسمياً كـ **`BLOCKED`** حتى إثبات متطلبات `RB4011` الميدانية.
+
+---
+
+## تصحيح النطاق، اختبار سعة المصادقة (`10–500`)، تحسين التوسع، والتنظيف الآمن (`RB-045` — `RB-051`) — 2026-11-21
+
+- **تصحيح النطاق (`Scope`):** تثبيت أن المشروع يقتصر على مصادقة المستخدمين، فحص `MAC Address` وحالة الحساب، منح وإلغاء صلاحية HotSpot، مزامنة `Revocation`/`ACK`، ولوحة الإدارة — دون أي وظائف لإدارة سرعة الإنترنت أو Bandwidth/DPI.
+- **`RB-046` (`PASS`):**
+  - استبدال `createClient(...)` المتكرر داخل كل طلب في [portal-auth/index.ts](supabase/functions/portal-auth/index.ts) و[verify-mac/index.ts](supabase/functions/verify-mac/index.ts) و[admin-api/index.ts](supabase/functions/admin-api/index.ts) بدالة `getDb()` أحادية على مستوى الـ isolate، ونشرها جميعاً على `Rawad Test`.
+  - إضافة فهرسَي الأداء الجزئيّين `idx_sessions_pending_revocations` و`idx_sessions_active_expires` في [supabase/schema.sql](supabase/schema.sql) وتطبيقها على `Rawad Test` مع التحقق عبر `pg_indexes`.
+- **`RB-045` (`PASS` حتى `300` متزامن؛ التشبع عند `500`؛ عتاد RB4011 `NOT TESTED`):**
+  - اجتاز تدفق المصادقة الكامل 100% من `10` حتى **`300` مستخدم متزامن** (`300/300` E2E، `57.58 rps`, `p50=4321ms`, `p95=4765ms`, `p99=4917ms`, `max=5204ms`, `revAck=300/300` خلال `11887ms`).
+  - عند **`500` مستخدم متزامن** وصلت بوابة الاتصال إلى نقطة تشبع: نجح `191/500` (مع `191/191 ACK`) وأخفقت `309` طلبات بسبب `TypeError` (انتهاء مهلة فتح 500 اتصال TLS متزامن عند `~10,106ms`) مع بقاء النظام `Fail-Closed` دون جلسات معلقة.
+  - اجتياز `20` طلباً مكرراً لنفس MAC (جلسة نشطة واحدة بالضبط في DB)، ورفض الحساب المنتهي والحصة المستنفدة (`403`) و`MAC` غير المصرح (`403`) والسر الخاطئ (`401`).
+- **`RB-047` (`PASS` للمحاكاة / RB4011 `NOT TESTED`):** قياس CHR الفعلي (`cpu-load: 0%`, `free-memory: 267.8–268.4MiB / 512.0MiB`, `25` قاعدة Filter, `21` قاعدة NAT, حاوية `1300.0KiB`) وتوثيق حدود `deploy.rsc` (`241` عنوان DHCP و`shared-users=250`).
+- **`RB-048` و`RB-049` (`PASS`):** جرد جميع الملفات الـ`45` المتتبعة (`44 KEEP`، أرشفة `FIELD_TEST.md` -> [docs/archive/FIELD_TEST.md](docs/archive/FIELD_TEST.md) عبر `git mv` بعد إثبات `0` مراجع، و`0 DELETE` لملفات المستودع لبقاء ملفات `scratch/` معزولة خارجه)، وتحديث [README.md](README.md) بالنطاق الصحيح، و`0` مجلدات فارغة.
+- **`RB-050` و`RB-051` (`PASS`):** اجتياز كامل اختبارات ما بعد التنظيف (`verify_system.mjs` الساكن، `run_stage5_tests.mjs` `7/7`، `6/6` أصول لوحة الإدارة `HTTP 200`، `hotspot/` و`hotspot1` على CHR، `GREP_EXIT=1`، ونظافة DB `admins=2, users=2, rem=0`).

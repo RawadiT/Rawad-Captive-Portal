@@ -71,3 +71,15 @@
 | `RB-042` | Supabase Migration Tracking Analysis & Safe Sync Method | Inspect `pg_namespace` & `supabase migration list --linked`; document root cause (`remote=""`) and safe `migration repair --status applied` procedure without bypassing CLI consent or modifying Production | `PASSED` (`PASS`) |
 | `RB-043` | Full-System E2E Load Test (`10, 25, 40, 60, 100` Users + `25` PBKDF2 Auth) | Run full 5-step user lifecycle + `revoked`/`ACK` batch flow across `10–100` concurrent simulated users + `25` PBKDF2 logins in `Rawad Test`; distinguish HTTP static vs Edge vs Full E2E vs physical RB4011; clean all synthetic data | `PASSED` (`PASS` on `Rawad Test` / HW `NOT TESTED`) |
 | `RB-044` | Update Documentation with Honest Production Blockers, Load Breakdown & Final Report | Sync `PRODUCTION-READINESS.md`, `TEST-REPORT.md`, `RB4011-COMPATIBILITY.md`, `ROLLBACK.md`, `TASKS.md`, `PROGRESS.md`; re-verify & push cleanly without `--force` | `PASSED` (`PASS`) |
+
+## Scope Clarification, Auth Capacity (`10–500`), Scalability & Safe Cleanup (`RB-045` — `RB-051`)
+
+| Task ID | Task Name | Acceptance Criteria | Status |
+| :--- | :--- | :--- | :--- |
+| `RB-045` | Authentication & Session Capacity Benchmark (`10–500`) + Edge Cases | Full E2E auth lifecycle (`free -> verify-mac -> session_status -> logout -> revoked/ACK`) across `10..500`, `P50/P95/P99`, duplicate-race, expired/exhausted & secret guards measured cleanly | `PASSED` (`300/300` max 100% tier; `500` saturated `191/500`; RB4011 HW `NOT TESTED`) |
+| `RB-046` | Targeted Scalability & Stability Hardening (`getDb()` + Partial Indexes) | Module-level singleton client reuse in 3 Edge Functions + `idx_sessions_pending_revocations` & `idx_sessions_active_expires` in `schema.sql` deployed to `Rawad Test` | `PASSED` (`PASS`) |
+| `RB-047` | MikroTik Resource & Architectural Limits Audit | Measured `Rawad-CHR-Lab` CPU/RAM/rule overhead + documented DHCP `/24` (`241` IPs) & `shared-users=250` without assuming physical RB4011 ceiling | `PASSED` (`PASS` on CHR / HW `NOT TESTED`) |
+| `RB-048` | Full Inventory & Safe Repository Cleanup (`KEEP` / `ARCHIVE` / `DELETE`) | Classified all 45 tracked files (`44 KEEP`, `1 ARCHIVE: docs/archive/FIELD_TEST.md`, `0 DELETE`), verified zero broken refs | `PASSED` (`PASS`) |
+| `RB-049` | Repository Organization & Scope Clarification (`README.md`) | Updated `README.md` with explicit Auth-only Scope Clarification & `docs/archive/`, separated scratch outputs cleanly outside repo | `PASSED` (`PASS`) |
+| `RB-050` | Full Post-Cleanup Regression & Functionality Verification | Verified `verify_system.mjs`, `run_stage5_tests.mjs` (`7/7`), all 6 Admin UI assets `HTTP 200`, CHR `hotspot/`, `.github/workflows/`, secret scan (`GREP_EXIT=1`) & clean DB | `PASSED` (`PASS`) |
+| `RB-051` | Final Update of All Docs, Git Sync, Push & 11-Point Report | Updated `TASKS`, `PROGRESS`, `TEST-REPORT`, `PRODUCTION-READINESS`; verified after last edit; non-forced push to `main` & `field-test-preparation`; delivered 11-point report | `PASSED` (`PASS`) |
