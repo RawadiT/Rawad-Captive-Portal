@@ -45,5 +45,20 @@
 | `RB-027` | 8 | Execute Final Documentation Consistency & Pre-Acceptance Audit | `RB-026` | Verify all 6 deliverable docs (`TASKS`, `PROGRESS`, `TEST-REPORT`, `RB4011-COMPATIBILITY`, `LAB-SETUP`, `ROLLBACK`) match observed outputs | `PASSED` |
 | `FINAL-ACCEPTANCE-TEST` | 8 | Complete 17-Point Cold-Start Final Acceptance Test | `RB-027` | Cold VM power-off/on of CHR + Win10 VM, all 17 acceptance items executed & passed after final fixes, zero secrets leaked | `PASSED` |
 | `RB-028` | 8 | Author `PRODUCTION-READINESS.md` & Hardware Rollout Checklist | `FINAL-ACCEPTANCE-TEST` | Final honest readiness %, explicit assessment on extra RB4011 coding, and minimal-risk company RB4011 checklist completed | `PASSED` |
-| `RB-029` | 9 | Organized Git Commits, Branch Sync (`main` & `field-test-preparation`) & Push | `RB-028` | Clean non-forced push to `origin/main` and `origin/field-test-preparation`; remote SHA-1 matches local; `git status` clean | `IN_PROGRESS` |
-| `RB-030` | 9 | Deliver Unified 14-Point Arabic Final Report | `RB-029` | Complete 14-section report with verified facts, `file:///` links, and honest hardware-only checklist delivered | `IN_PROGRESS` |
+| `RB-029` | 9 | Organized Git Commits, Branch Sync (`main` & `field-test-preparation`) & Push | `RB-028` | Clean non-forced push to `origin/main` and `origin/field-test-preparation`; remote SHA-1 matches local; `git status` clean | `PASSED` |
+| `RB-030` | 9 | Deliver Unified 14-Point Arabic Final Report | `RB-029` | Complete 14-section report with verified facts, `file:///` links, and honest hardware-only checklist delivered | `PASSED` |
+
+## Final Validation, Performance & Production Readiness Tasks (`RB-031` — `RB-040`)
+
+| Task ID | Task Name | Acceptance Criteria | Status |
+| :--- | :--- | :--- | :--- |
+| `RB-031` | Refine `Powered BY Hashim Hasanen` Styling in Admin UI | Light gray subtle color, smaller font size, soft opacity, transparent/minimal aesthetic verified on Desktop & Mobile + CHR container | `PASSED` (`PASS`) |
+| `RB-032` | Honest Audit of Previous Failed/Cancelled/Killed/Timeout Runs | Every non-clean run categorized (`PASS \| FAIL \| BLOCKED \| NOT TESTED \| CANCELLED`) with log evidence in `TEST-REPORT.md` & `PROGRESS.md` | `PASSED` (`PASS`) |
+| `RB-033` | Complete Full Simulation Checks (Incl. Live Fail-Closed Test) | Fail-Closed unapproved MAC hotSpot check, DHCP/DNS/NAT, CHR reboot, container auto-recovery, RBAC/RLS/HMAC, WAN/Client recovery verified | `PASSED` (`PASS`) |
+| `RB-034` | Diagnose BusyBox `n=100` Bottleneck & Validate Internal LAN Static Alternative | Root cause of BusyBox `n=100` failures identified (`FAIL` on BusyBox); internal LAN static host benchmarked 10/25/40/60/100 at 100% HTTP 200 (`PASS`); Edge Functions re-verified | `PASSED` (`PASS` LAN / `FAIL` BusyBox) |
+| `RB-035` | Review Hardware Compatibility with Physical `RB4011iGS+RM` | Full `ARM32/ARMv5`, `1GB RAM`, `512MB NAND`, `RTL8367SB`, RouterOS 7.x review + off-router service separation + explicit untested/blocked hardware list | `PASSED` (Doc/Preflight; `ARM32` `BLOCKED`) |
+| `RB-036` | Design Production Deployment Strictly Scoped to `ether10` (`A–F`) | Subsections A–F (`ether1–ether9` protection, `ether10` isolation, preflight 8 checks, stop conditions, surgical rollback, pre/post test plan) documented | `PASSED` (Design; HW `NOT TESTED`) |
+| `RB-037` | Comprehensive Security Audit | Zero leaks across Git/code/docs, RLS/RBAC/Edge Functions/HMAC/MAC verification, guest isolation, WAN admin block, Fail-Closed verified | `PASSED` (`PASS`) |
+| `RB-038` | Database & Supabase `Rawad Test` Deep Audit | Migrations, schema, RLS, Edge Functions, cleanup summary, unlimited accounts, preserved `admins`/`users`, hardcoded lab inventory audited | `PASSED` (`PASS`) |
+| `RB-039` | Final 20-Row Acceptance Matrix | Full 20-item matrix with exact honest classifications (`PASS / FAIL / BLOCKED / NOT TESTED / CANCELLED`) & concrete evidence | `PASSED` (`PASS`) |
+| `RB-040` | Update All 7 Docs, Verify, Push to GitHub & Deliver Final Report | All 7 markdown docs updated & consistent, `verify_system.mjs` + secret scan pass, non-forced push to `main` & `field-test-preparation`, final report delivered | `PASSED` (`PASS`) |

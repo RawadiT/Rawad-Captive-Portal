@@ -89,3 +89,95 @@
 | 15 | التحقق من اكتمال وتناسق الملفات الـ 7 | وجود وتناسق `TASKS.md`, `PROGRESS.md`, `TEST-REPORT.md`, `RB4011-COMPATIBILITY.md`, `PRODUCTION-READINESS.md`, `LAB-SETUP.md`, `ROLLBACK.md` | `PASSED` |
 | 16 | فحص نظافة `git status` و`git diff` | جميع التغييرات محصورة في السكربتات والتوثيق والاختبارات المتعمدة دون ملفات مؤقتة أو `scratch/` | `PASSED` |
 | 17 | فحص تسرب الأسرار وبيانات الاعتماد | `git grep` على الملفات المتتبعة يؤكد صفر أسرار، صفر كلمات مرور، وعدم تتبع `pgpass.conf` أو النسخ الاحتياطية | `PASSED` |
+
+---
+
+## 5. التدقيق الصادق لسجلات التشغيل السابقة غير المكتملة (`RB-032`)
+
+تصنيف جميع مخرجات `task-*.log` السابقة وفق التصنيف الخماسي الإلزامي (`PASS | FAIL | BLOCKED | NOT TESTED | CANCELLED`):
+
+| معرف السجل | الحدث الفعلي المُلاحظ في السجل | التصنيف الصادق | السبب الجذري والمعالجة اللاحقة |
+| :--- | :--- | :---: | :--- |
+| `task-1079` | تعذّر تصدير CHR بسبب علامة تنصيص مفردة في أمر RouterOS (`line 1 column 30`) وتوقّف باكر لـ `ssh 127.0.0.1:2222` | `CANCELLED` | صياغة RouterOS غير صحيحة؛ أُعيدت صياغة الأمر وتأكد الوصول عبر SSH بنجاح لاحقاً |
+| `task-1141` | انقطاع سطر `-EncodedCommand` في نافذة `Win+R` على Windows 10 بسبب حد `259` حرفاً | `CANCELLED` | ليس فشلاً للنظام؛ استُبدل بفتح `cmd` من قائمة ابدأ وتنفيذ أوامر `curl.exe` قصيرة في `task-1159` (`PASS`) |
+| `task-1171` | تنفيذ فحوص Win10 وحفظ اللقطة، ثم `Exit 1` في النهاية بسبب `:put '---NAT-STATS---'` داخل CHR | `FAIL` | خطأ تنصيص مفرد في استعلام CHR النهائي فقط؛ أُعيد باستعمال تنصيص مزدوج في `task-1180`/`task-1196` (`PASS`) |
+| `task-1250` | `Exit 1` في `run_stage5_tests.mjs:409`: السكربت توقّع `reason === 'disabled'` بينما الخادم أرجع `'disconnected'` | `FAIL` | تطابق نصّي غير دقيق في سكربت الاختبار؛ عُدّل إلى `['disconnected', 'disabled']` وأُعيد التشغيل في `task-1267` و`task-1403` (`7/7 PASS`) |
+| `task-1290` | تعارض `{ stdio: 'inherit', input: sql }` أثناء تهيئة مستخدمي Win10 في `prep_win10_users.mjs` | `CANCELLED` | خطأ عقدة Node `stdio`؛ أُزيل `stdio: 'inherit'` وعمل التشغيل التالي بنجاح (`PASS`) |
+| `task-1335` | إلغاء المهلة أثناء انتظار إقلاع CHR بعد `/system reboot` | `CANCELLED` | انتظار زمني قبل جاهزية SSH فقط |
+| `task-1350` | `CANCELLED` لأن نمط المطابقة `00:0[01]` لم يطابق صيغة RouterOS `1m7s` في `uptime` | `CANCELLED` | خطأ نمط Regex في فحص الانتظار وليس تعطل CHR |
+| `task-1357` | خروج `0` مع مهلة مؤقتة لـ `192.168.56.2` أثناء لحظة إقلاع CHR الوسطى | `CANCELLED` | سباق زمني عابر أثناء الإقلاع؛ بعد ثوانٍ عند `uptime 1m21s` حقّقت CHR `200` والحاوية `R - RUNNING` (`PASS`) |
+| `task-1367` | سقوط `13` من `100` طلب على `CHR BusyBox httpd` (`200: 87, ERR: 13`) مقابل نجاح جميع الدوال إلى `n=100` | `FAIL` | اختناق حقيقي في `BusyBox httpd` أحادي العملية على معالج واحد؛ أُثبت السبب الجذري واستُبدل إنتاجياً بالاستضافة الساكنة على LAN (`RB-034`: `100/100 PASS`) |
+| `task-1436` | إخفاق المحاولة الأولى لاختبار القبول البارد: لوحة Win10 باللغة العربية `ع` حوّلت `cmd` إلى `ؤةي` داخل Edge وفشل `WAN_ON` عند ثانية `6s` قبل تجديد DHCP | `FAIL` | ضبط التبديل إلى `ENG` (`LeftWin+Space`) وانتظار تجديد `ether1` (`~8–10s`) فأكملت المحاولة الثانية `task-1461` جميع الفحوص (`PASS`) |
+| `verify_system.mjs` | اجتياز جميع الفحوص الساكنة (`ALL SYSTEM VERIFICATIONS PASSED`) وتجاوز قسم PostgreSQL لعدم توفر خادم محلي شغّال حالياً | `PASS` (ساكن) / `NOT TESTED` (PG محلي الآن) | فحوص PG 17 (`UP/DOWN/UP` والـ 8 RPCs) اجتازت فعلياً في المرحلة 1 + على `Rawad Test` الحية في `RB-038` |
+
+---
+
+## 6. التحقق التكميلي من الواجهة والمحاكاة واختبار `Fail-Closed` الحي (`RB-031`, `RB-033`)
+
+- **تحسين توقيع لوحة الإدارة (`RB-031` — `PASS`):**
+  - تعديل `.powered-by` و`.powered-by:hover` في [admin/style.css](admin/style.css#L205-L220) إلى `#94a3b8`، بحجم `10.5px`، `font-weight: 500`، شفافية `0.78`، و`background: transparent; border: none; padding: 0`.
+  - مزامنة الملف إلى حاوية CHR (`/admin-www/style.css` -> `HTTP 200`, `23015 bytes`).
+  - التحقق البصري والبرمجي عبر `chrome-devtools-mcp` على `http://192.168.56.2:8088/` (`Desktop 1440×900` و`Mobile 390×844`): القيم المحسوبة مطابقة (`rgb(148, 163, 184)`, `10.5px`, `500`, `0.78`, `rgba(0, 0, 0, 0)`, `none`)، `overflow = false`، `0` أخطاء أو تحذيرات Console.
+- **اختبار `Fail-Closed` المباشر والتحقق التكميلي على `RAWAD-WIN10-CLIENT` + `Rawad-CHR-Lab` (`RB-033` — `PASS`):**
+  - تفريغ جلسات HotSpot الفعّالة وقائمة `rawad-verified` ثم محاولة عميل Win10 (`192.168.88.250`, MAC `08:00:27:44:DC:6B`) تمرير `http://192.168.88.1/login?username=rawad-gate&password=rawad-gate` مباشرة دون تفويض مسبق من `portal-auth`.
+  - **النتيجة المرصودة (`win10-rb033-failclosed.png`):** طبع الطرفي `GATE_HTTP=200 FC_INET=000` (عُرضت صفحة/إعادة توجيه البوابة فقط وظل الإنترنت محجوباً `000` بمبدإ Fail-Closed)، وبقيت قائمة `rawad-verified` فارغة تماماً على CHR.
+  - تأكيد عمل بنية المختبر: إيجار DHCP `192.168.88.250` مرتبط بـ `08:00:27:44:DC:6B`، DNS `allow-remote-requests: yes` (`1.1.1.1, 8.8.8.8`, `cache-used: 62KiB`)، وقاعدة NAT `masquerade` فعّالة (`437` حزمة).
+
+---
+
+## 7. تشخيص `BusyBox httpd` عند `n=100` وقياس الاستضافة المحلية الساكنة على LAN (`RB-034`)
+
+- **تشخيص العطل في `CHR BusyBox httpd` (`http://192.168.56.2:8088/`, `n=100`, مهلة `15s`) — `FAIL` (للحمل 100):**
+  - `63` استجابة `HTTP 200`، مقابل **`26` خطأ اتصال مُعاد ضبطه (`ERR:23` — `ECONNRESET`/`WSAECONNRESET`)** و**`11` انتهاء مهلة اتصال (`ERR:UND_ERR_CONNECT_TIMEOUT`)**.
+  - الزمن الإجمالي: `15021ms` (`6.7 rps`, `p50=10477ms`, `p95=15003ms`, `max=15004ms`).
+  - **السبب الجذري:** خادم `BusyBox httpd` داخل الحاوية أحادي العملية بطابور `listen backlog` محدود على معالج واحد، فتُسقِط نواة الشبكة اتصالات TCP المتدفقة متزامنةً عند `n=100`.
+- **قياس البديل المعتمد للإنتاج: استضافة ساكنة داخلية على LAN الشركة (`admin/`) مع دوال Supabase (`scratch/rb034_load_results.json`) — `PASS` (`100%` عبر جميع المستويات):**
+
+| التزامن (`n`) | `LAN Admin index.html` | `LAN Assets Burst` | `Edge portal-auth GET` | `Edge verify-mac?action=revoked` | ذاكرة خادم LAN (`RSS`) |
+| :---: | :--- | :--- | :--- | :--- | :---: |
+| **10** | `200: 10` \| `31ms` \| `322.6 rps` \| `p50=26ms` \| `max=29ms` | `200: 10` \| `8ms` \| `1250 rps` \| `max=7ms` | `200: 10` \| `2309ms` \| `4.3 rps` \| `p50=1095ms` \| `max=2302ms` | `200: 10` \| `1053ms` \| `9.5 rps` \| `p50=910ms` \| `max=1053ms` | `80.5 MB` |
+| **25** | `200: 25` \| `28ms` \| `892.9 rps` \| `p50=22ms` \| `max=26ms` | `200: 25` \| `12ms` \| `2083.3 rps` \| `max=11ms` | `200: 25` \| `1870ms` \| `13.4 rps` \| `p50=912ms` \| `max=1869ms` | `200: 25` \| `976ms` \| `25.6 rps` \| `p50=834ms` \| `max=976ms` | `88.7 MB` |
+| **40** | `200: 40` \| `32ms` \| `1250 rps` \| `p50=24ms` \| `max=30ms` | `200: 40` \| `18ms` \| `2222.2 rps` \| `max=15ms` | `200: 40` \| `1109ms` \| `36.1 rps` \| `p50=837ms` \| `max=1104ms` | `200: 40` \| `1156ms` \| `34.6 rps` \| `p50=411ms` \| `max=1155ms` | `90.6 MB` |
+| **60** | `200: 60` \| `35ms` \| `1714.3 rps` \| `p50=29ms` \| `max=32ms` | `200: 60` \| `24ms` \| `2500 rps` \| `max=21ms` | `200: 60` \| `1061ms` \| `56.6 rps` \| `p50=500ms` \| `max=1054ms` | `200: 60` \| `980ms` \| `61.2 rps` \| `p50=425ms` \| `max=976ms` | `99.1 MB` |
+| **100** | **`200: 100` \| `63ms` \| `1587.3 rps` \| `p50=50ms` \| `p95=56ms` \| `max=59ms`** | **`200: 100` \| `34ms` \| `2941.2 rps` \| `p50=23ms` \| `max=31ms`** | **`200: 100` \| `1090ms` \| `91.7 rps` \| `p50=656ms` \| `max=1079ms`** | **`200: 100` \| `1080ms` \| `92.6 rps` \| `p50=525ms` \| `max=1075ms`** | `119.8 MB` |
+
+---
+
+## 8. تدقيق الأمان وقاعدة بيانات `Rawad Test` والمخزون الثابت (`RB-037`, `RB-038`)
+
+- **تدقيق `Rawad Test` (`efqsmehqnhuzohzjztni`):**
+  - **تفعيل RLS على الجداول الخمسة:** `admins`, `free_quotas`, `portal_settings`, `sessions`, `users` جميعها `relrowsecurity = true`.
+  - **منع الوصول المباشر:** مصفوفة `ANON_AUTH_GRANTS = []`، وصفر صلاحيات تنفيذ للدوال أمام `PUBLIC` و`anon` و`authenticated`؛ ومحاولة استدعاء `get_cleanup_summary()` مباشرة عبر اتصال SQL قرائي رُفضت برمز `42501 permission denied`. كما أعادت نقاط `/rest/v1/*` الخمس رمز **`HTTP 401`** لمفتاح `anon`.
+  - **الدوال المخزنة (`pg_proc`):** وجود جميع الدوال الثماني المطلوبة في المخطط. ملاحظة تدقيقية: جدول `supabase_migrations.schema_migrations` قيمته `null` في `Rawad Test` لأن المخطط والترحيل طُبّقا مباشرة عبر CLI/`psql` وليس `supabase db push`؛ يجب توحيد آلية النشر عند الانتقال للإنتاج.
+  - **سلامة البيانات المحمية:** `admins = 2` (`hashim:site_owner`, `testo:general`)، `users = 2` (`test`, `hashim`)، وعدد الصفوف الاصطناعية المتبقية `{tmp_admins: 0, tmp_users: 0, tmp_quotas: 0, tmp_sessions: 0}`.
+- **مخزون القيم الثابتة التي تستلزم الاستبدال/المراجعة قبل الإنتاج (بدون أسرار):**
+  1. عنوان المشروع ومفتاح `anon` العام لبيئة الاختبار `efqsmehqnhuzohzjztni.supabase.co` داخل [admin/index.html](admin/index.html)، [hotspot/login.html](hotspot/login.html)، و[hotspot/status.html](hotspot/status.html).
+  2. معرف UUID الثابت `'39c0a9e8-028d-4c04-a0e3-e46e21cef7d9'` في [supabase/functions/admin-api/index.ts](supabase/functions/admin-api/index.ts#L160) لحماية `site_owner` الأول (مدعوم ديناميكياً في السطر `170` بشرط `is_super_admin || role === 'site_owner'`).
+  3. في الإنتاج، يجب حفظ متغيرات `ROUTER_SHARED_SECRET`، `ADMIN_TOKEN_SECRET`، و`SUPABASE_SERVICE_ROLE_KEY` كـ Edge Secrets منفصلة تماماً عن `Rawad Test`.
+
+---
+
+## 9. مصفوفة القبول النهائية ذات الـ 20 بنداً (`RB-039`) — التصنيف الموحّد الصارم
+
+| # | البند | البيئة | التصنيف النهائي | الدليل والملاحظة المختصرة |
+| :---: | :--- | :--- | :---: | :--- |
+| 1 | واجهة بوابة العميل `portal_settings` + `login.html` / `status.html` | Edge + Win10 Lab | `PASS` | تحميل فوري في Edge للشعار والنص والتنسيق دون تحديث ميتا |
+| 2 | الحصة المجانية `ALLOW:<sec>` وسياسة اليوم الحالي (`Asia/Baghdad`) | Edge + Win10 Lab | `PASS` | `29m48s` في `rawad-verified`، ورفض المحاولة بعد الاستنفاد بـ `403` |
+| 3 | الحساب المحدود ونقل الجلسة بين عناوين `MAC` | Edge + Win10 Lab | `PASS` | `59m44s` في `rawad-verified` وسحب `MAC1` فور دخول `MAC2` |
+| 4 | الحساب المفتوح `ALLOW:UNLIMITED` دون `timeout=` | Edge + Win10 Lab | `PASS` | إدراج `dynamic=no` بلا مؤقت وعرض `غير محدود` في `status.html` |
+| 5 | السحب التلقائي بعد التعطيل/الحذف وإقرار `ACK` | Edge + CHR `15s` | `PASS` | إزالة `08:00:27:44:DC:6B` وإفراغ القائمة خلال `≤18s` وتسجيل `ACK` |
+| 6 | اختبار `Fail-Closed` حي دون تفويض `portal-auth` | Win10 + CHR Lab | `PASS` | `win10-rb033-failclosed.png`: `GATE_HTTP=200 FC_INET=000` و`rawad-verified` فارغة |
+| 7 | عزل جدار الحماية للضيوف وحجب الشبكات الداخلية وWAN `8088` | CHR Lab + Win10 | `PASS` | حظر `10.10.10.1` (`60B` input) و`10.10.20.5` (`60B` forward) و`WAN->8088` |
+| 8 | استقرار DHCP / DNS / NAT والإقلاع البارد وإعادة تشغيل CHR | VirtualBox Lab | `PASS` | إقلاع بارد، تجديد DHCP `192.168.88.250`، عودة HotSpot والمجدول والحاوية `R` |
+| 9 | استعادة أعطال قطع WAN وقطع شبكة العميل | VirtualBox Lab | `PASS` | فشل أثناء القطع وعودة `CHR_WAN_NOW=200` بعد `~8–10s` و`NIC_ON=200` |
+| 10 | لوحة الإدارة: RBAC + تحسين `.powered-by` + التجاوب | Chrome + CHR Lab | `PASS` | `#94a3b8`, `10.5px`, `0.78`, `transparent`, `overflow=false`, `0` أخطاء Console |
+| 11 | تحمّل دوال Supabase الثلاث حتى `n=100` طلب متزامن | Supabase Edge | `PASS` | `100/100 HTTP 200` (`portal-auth 91.7 rps`, `verify-mac 92.6 rps`, `0` أخطاء) |
+| 12 | استضافة لوحة الإدارة عبر `CHR BusyBox httpd` عند `n=100` | `192.168.56.2:8088` | **`FAIL`** | `63/100 200` (`26 ECONNRESET`, `11 timeout`) وقبلها `87/100 200`؛ غير معتمدة للذروة |
+| 13 | بديل الاستضافة المحلية الساكنة على LAN الشركة (`10–100`) | خادم LAN محلي | `PASS` | `100/100 HTTP 200` عبر المستويات الخمسة (`1587.3 rps`, `max=59ms` عند `n=100`) |
+| 14 | قفل RLS وصلاحيات `anon`/`authenticated` و`RBAC` وتوقيع `HMAC` | `Rawad Test` | `PASS` | RLS `true` على الجداول الـ5، REST `401`، و`get_cleanup_summary` `42501` قرائياً |
+| 15 | سلامة مخطط `Rawad Test` والـ 8 RPCs ونظافة الأساس | `Rawad Test` | `PASS` | `admins=2` (`hashim`, `testo`), `users=2` (`test`, `hashim`), `0` صفوف مؤقتة |
+| 16 | فحص الانحدار الساكن `verify_system.mjs` ومسح الأسرار عبر Git | المستودع المحلي | `PASS` | اجتياز الفحص الساكن + صفر تسريب أسرار في الملفات المتتبعة |
+| 17 | تدقيق السجلات السابقة المنقطعة (`RB-032`: مهلة/إلغاء/انقطاع `stdin`) | سجل الأتمتة | `CANCELLED` | سُجّلت بشفافية (`1079, 1141, 1290, 1335, 1350, 1357`) واستُبدلت بتشغيلات ناجحة |
+| 18 | اختبارات PostgreSQL 17 داخل آخر تشغيل لـ `verify_system.mjs` | جهاز المطور | **`NOT TESTED`** (في آخر تشغيل) | طُبعت `SKIPPED: No local PostgreSQL test instance available` حالياً (أُنجزت في المرحلة 1 + `Rawad Test`) |
+| 19 | تشغيل حاوية `BusyBox` على معمارية **`RB4011 ARM32 / ARMv5`** | غير متاح | **`BLOCKED`** | محظور لغياب Hyper-V/QEMU `ARM32` محلياً وبسبب قيود `512MB NAND`/`ARM32` |
+| 20 | النشر الحصري على منفذ **`ether10`** في **RB4011 الإنتاجي الحقيقي** وسلامة **`ether1–ether9`** | عتاد الشركة الحقيقي | **`NOT TESTED`** | لم يُلمس الراوتر الإنتاجي إطلاقاً؛ التحقق العتادي النهائي مشروط بنافذة الصيانة الميدانية وخطة القسم `F` |

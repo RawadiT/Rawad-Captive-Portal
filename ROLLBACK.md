@@ -29,6 +29,10 @@
    /import file-name=verify.rsc
    ```
    يجب ألا يُرجع أي موارد نشطة باسم `rawad-guest-*` أو `rawad-verified-prof`.
+5. **محظورات التراجع على RB4011 الإنتاجي (`RB-036 E`):**
+   - **ممنوع** استخدام أوامر مسح شاملة مثل `remove [find]` غير المقيدة على Firewall/NAT/DHCP/HotSpot أو أوامر `/system reset-configuration`.
+   - **ممنوع** تنفيذ استعادة ثنائية شاملة `.backup` بطريقة تمس تعديلات لاحقة على `ether1–ether9` دون دراسة مسبقة.
+   - يجب التحقق من استمرار الإنترنت والـ DHCP والـ DNS على منافذ الشركة `ether1–ether9` مباشرة بعد التراجع.
 
 ---
 
