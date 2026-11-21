@@ -3,6 +3,7 @@
 # Architecture: MikroTik HotSpot UI (hotspot/) + Supabase Edge Functions
 # Target: MikroTik RB4011iGS+RM (RouterOS v7)
 # STRICT SCOPE: Configured EXCLUSIVELY for ether10 (192.168.20.0/24).
+# ZERO GLOBAL MUTATIONS: /ip dns, /system clock, /system ntp client are read-only.
 # NEVER touches ether1-ether9, WAN, Staff bridges, or unrelated rules.
 # ==============================================================================
 
@@ -34,6 +35,11 @@
 }
 :if ([:len [/ip address find where address~"192.168.20." && comment!="rawad-guest-portal"]] > 0) do={
     :error "ABORT: Subnet 192.168.20.x conflicts with an existing IP address. Resolve manually."
+}
+
+# Read-only global DNS prerequisite gate: NEVER mutates global DNS settings.
+:if ([/ip dns get allow-remote-requests] != true) do={
+    :error "ABORT: Global /ip dns allow-remote-requests is false. deploy.rsc will NOT mutate global DNS settings affecting ether1-ether9. Audit DNS/WAN/LAN firewall first."
 }
 
 # Strict DNS Open-Resolver Gate: ALWAYS run regardless of current allow-remote-requests value.
@@ -139,11 +145,8 @@
     }
 }
 
-:put "=== [2/9] Recording Ownership & Previous State Snapshot ==="
+:put "=== [2/9] Recording Ownership Snapshot (ether10 Resources Only) ==="
 :local isInitialDeploy ([:len [/system script find where name="rawad-portal-state"]] = 0)
-:local prevDns false
-:local prevTz ""
-:local prevNtpEn false
 
 :local crIpAddr false; :local idIpAddr ""
 :local crPool false; :local idPool ""
@@ -169,10 +172,6 @@
 :local idStateScript ""
 
 :if ($isInitialDeploy) do={
-    :set prevDns [/ip dns get allow-remote-requests]
-    :set prevTz [/system clock get time-zone-name]
-    :set prevNtpEn [/system ntp client get enabled]
-
     :set crIpAddr ([:len [/ip address find where interface=$guestIf && comment="rawad-guest-portal"]] = 0)
     :set crPool ([:len [/ip pool find where name="rawad-guest-pool"]] = 0)
     :set crDhcpOpt ([:len [/ip dhcp-server option find where name="rawad-capport-114"]] = 0)
@@ -195,7 +194,7 @@
     :set crV6In ([:len [/ipv6 firewall filter find where comment=$cV6In]] = 0)
     :set crSched ([:len [/system scheduler find where name="rawad-sync-revocations"]] = 0)
 
-    :local initSrc (":global rawadPrevDnsRemote " . $prevDns . ";")
+    :local initSrc (":global rawadGuestIf \"" . $guestIf . "\";")
     :set idStateScript [/system script add name="rawad-portal-state" source=$initSrc comment="rawad-guest-portal-state"]
 }
 
@@ -218,10 +217,10 @@
     :set idDhcpSrv [/ip dhcp-server add name="rawad-guest-dhcp" interface=$guestIf address-pool="rawad-guest-pool" lease-time=1h disabled=no comment="rawad-guest-portal"]
 }
 
-:put "=== [5/9] Enabling Local DNS Forwarding & Asia/Baghdad Timezone + NTP ==="
-/ip dns set allow-remote-requests=yes
-/system clock set time-zone-name=Asia/Baghdad
-/system ntp client set enabled=yes
+:put "=== [5/9] Verifying Read-Only Global Prerequisites (No Global Mutations) ==="
+:put ("DNS allow-remote-requests (pre-existing): " . [/ip dns get allow-remote-requests])
+:put ("System timezone (untouched): " . [/system clock get time-zone-name])
+:put ("NTP client enabled (untouched): " . [/system ntp client get enabled])
 
 :put "=== [6/9] Creating HotSpot Server, Verified User Profile (on-login verify-mac) & Gate User ==="
 :local onLoginSrc (":local supaHost \"" . $supabaseHost . "\";\n" . \
@@ -252,7 +251,7 @@
   "  /ip hotspot active remove [find where server=\"rawad-guest-hotspot\" && mac-address=\$macStr && address=\$ipStr];\n" . \
   "}")
 
-:local onLogoutSrc "/ip firewall address-list remove [find where list=\"rawad-verified\" && address=\$address];"
+:local onLogoutSrc "/ip firewall address-list remove [find where list=\"rawad-verified\" && address=\$address && comment=\"rawad-guest-portal\"];"
 
 :if ([:len [/ip hotspot profile find where name="rawad-hs-prof"]] = 0) do={
     :set idHsProf [/ip hotspot profile add name="rawad-hs-prof" hotspot-address=$guestGw html-directory="hotspot" login-by=http-chap,http-pap use-radius=no]
@@ -260,16 +259,16 @@
 :if ([:len [/ip hotspot user profile find where name="rawad-verified-prof"]] = 0) do={
     :set idHsUsrProf [/ip hotspot user profile add name="rawad-verified-prof" shared-users=250 on-login=$onLoginSrc on-logout=$onLogoutSrc]
 }
-:if ([:len [/ip hotspot user find where name="rawad-gate"]] = 0) do={
-    :set idHsUsr [/ip hotspot user add name="rawad-gate" password="rawad-gate" profile="rawad-verified-prof" comment="rawad-guest-portal"]
-}
 :if ([:len [/ip hotspot find where name="rawad-guest-hotspot"]] = 0) do={
     :set idHsSrv [/ip hotspot add name="rawad-guest-hotspot" interface=$guestIf address-pool="rawad-guest-pool" profile="rawad-hs-prof" disabled=no]
 }
+:if ([:len [/ip hotspot user find where name="rawad-gate"]] = 0) do={
+    :set idHsUsr [/ip hotspot user add name="rawad-gate" password="rawad-gate" server="rawad-guest-hotspot" profile="rawad-verified-prof" comment="rawad-guest-portal"]
+}
 
-:put "=== [7/9] Configuring Walled Garden (Allow ONLY Supabase Edge Functions HTTPS) ==="
+:put "=== [7/9] Configuring Walled Garden (Allow ONLY Supabase Edge Functions HTTPS on ether10) ==="
 :if ([:len [/ip hotspot walled-garden find where comment="rawad-guest-portal-allow-supabase"]] = 0) do={
-    :set idWg [/ip hotspot walled-garden add action=allow disabled=no dst-host=$supabaseHost dst-port=443 protocol=tcp comment="rawad-guest-portal-allow-supabase"]
+    :set idWg [/ip hotspot walled-garden add action=allow disabled=no server="rawad-guest-hotspot" dst-host=$supabaseHost dst-port=443 protocol=tcp comment="rawad-guest-portal-allow-supabase"]
 }
 
 :put "=== [8/9] Deterministic Firewall Rules (ether10 ONLY, Fail-Closed without rawad-verified) ==="
@@ -385,13 +384,7 @@
 }
 
 :if ($isInitialDeploy && $idStateScript != "") do={
-    :local stateBody (":global rawadPrevDnsRemote " . $prevDns . ";\n" . \
-      ":global rawadPrevTz \"" . $prevTz . "\";\n" . \
-      ":global rawadPrevNtpEn " . $prevNtpEn . ";\n" . \
-      ":global rawadSetDnsRemote true;\n" . \
-      ":global rawadSetTz \"Asia/Baghdad\";\n" . \
-      ":global rawadSetNtpEn true;\n" . \
-      ":global rawadGuestIf \"" . $guestIf . "\";\n" . \
+    :local stateBody (":global rawadGuestIf \"" . $guestIf . "\";\n" . \
       ":global rawadGuestGw \"" . $guestGw . "\";\n" . \
       ":global rawadGuestNet \"" . $guestNet . "\";\n" . \
       ":global rawadSupabaseHost \"" . $supabaseHost . "\";\n" . \

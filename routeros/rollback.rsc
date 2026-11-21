@@ -2,7 +2,7 @@
 # RAWAD TECH CAPTIVE PORTAL — MIKROTIK ROUTEROS v7 EXACT & SAFE ROLLBACK
 # - Verifies rawad-portal-state .id, grammar, and dual polynomial digest BEFORE running.
 # - Removes ONLY exact unmodified resources created by deploy.rsc.
-# - Restores previous DNS, NTP, and Timezone only if not manually modified after deploy.
+# - NEVER modifies global DNS, NTP, or Timezone settings.
 # ==============================================================================
 
 :put "=== Rolling back Rawad Tech Captive Portal (ether10 only) ==="
@@ -59,8 +59,6 @@
 
 /system script run $stateSid
 
-:global rawadPrevDnsRemote; :global rawadPrevTz; :global rawadPrevNtpEn
-:global rawadSetDnsRemote; :global rawadSetTz; :global rawadSetNtpEn
 :global rawadGuestIf; :global rawadGuestGw; :global rawadGuestNet; :global rawadSupabaseHost
 :global rawadCreatedIpAddr; :global rawadIdIpAddr
 :global rawadCreatedPool; :global rawadIdPool
@@ -99,11 +97,12 @@
 :if ($rawadCreatedSched = true && $rawadIdSched != "") do={ :do { /system scheduler remove [find where .id=$rawadIdSched && name="rawad-sync-revocations" && comment="rawad-guest-portal"] } on-error={} }
 
 # 2. Remove HotSpot resources (dependency-safe)
-:if ($rawadCreatedHsSrv = true && $rawadIdHsSrv != "") do={ :do { /ip hotspot remove [find where .id=$rawadIdHsSrv && name="rawad-guest-hotspot"] } on-error={} }
+:do { /ip hotspot active remove [find where server="rawad-guest-hotspot"] } on-error={}
+:if ($rawadCreatedWg = true && $rawadIdWg != "") do={ :do { /ip hotspot walled-garden remove [find where .id=$rawadIdWg && comment="rawad-guest-portal-allow-supabase"] } on-error={} }
 :if ($rawadCreatedHsUsr = true && $rawadIdHsUsr != "") do={ :do { /ip hotspot user remove [find where .id=$rawadIdHsUsr && name="rawad-gate"] } on-error={} }
+:if ($rawadCreatedHsSrv = true && $rawadIdHsSrv != "") do={ :do { /ip hotspot remove [find where .id=$rawadIdHsSrv && name="rawad-guest-hotspot"] } on-error={} }
 :if ($rawadCreatedHsUsrProf = true && $rawadIdHsUsrProf != "") do={ :if ([:len [/ip hotspot user find where profile="rawad-verified-prof"]] = 0) do={ :do { /ip hotspot user profile remove [find where .id=$rawadIdHsUsrProf && name="rawad-verified-prof"] } on-error={} } }
 :if ($rawadCreatedHsProf = true && $rawadIdHsProf != "") do={ :if ([:len [/ip hotspot find where profile="rawad-hs-prof"]] = 0) do={ :do { /ip hotspot profile remove [find where .id=$rawadIdHsProf && name="rawad-hs-prof"] } on-error={} } }
-:if ($rawadCreatedWg = true && $rawadIdWg != "") do={ :do { /ip hotspot walled-garden remove [find where .id=$rawadIdWg && comment="rawad-guest-portal-allow-supabase"] } on-error={} }
 
 # 3. Remove DHCP, Pool & IP
 :if ($rawadCreatedDhcpSrv = true && $rawadIdDhcpSrv != "") do={ :do { /ip dhcp-server remove [find where .id=$rawadIdDhcpSrv && name="rawad-guest-dhcp"] } on-error={} }
@@ -112,12 +111,7 @@
 :if ($rawadCreatedPool = true && $rawadIdPool != "") do={ :if ([:len [/ip dhcp-server find where address-pool="rawad-guest-pool"]] = 0 && [:len [/ip hotspot find where address-pool="rawad-guest-pool"]] = 0) do={ :do { /ip pool remove [find where .id=$rawadIdPool && name="rawad-guest-pool"] } on-error={} } }
 :if ($rawadCreatedIpAddr = true && $rawadIdIpAddr != "") do={ :do { /ip address remove [find where .id=$rawadIdIpAddr && interface=$rawadGuestIf && comment="rawad-guest-portal"] } on-error={} }
 
-# 4. Restore previous DNS, Timezone, and NTP ONLY if unmodified since deploy
-:if ([:typeof $rawadPrevDnsRemote] = "bool" && [/ip dns get allow-remote-requests] = $rawadSetDnsRemote) do={ /ip dns set allow-remote-requests=$rawadPrevDnsRemote }
-:if ([:typeof $rawadPrevTz] = "str" && [:len $rawadPrevTz] > 0 && [/system clock get time-zone-name] = $rawadSetTz) do={ /system clock set time-zone-name=$rawadPrevTz }
-:if ([:typeof $rawadPrevNtpEn] = "bool" && [/system ntp client get enabled] = $rawadSetNtpEn) do={ /system ntp client set enabled=$rawadPrevNtpEn }
-
-# 5. Remove verified state and anchor scripts
+# 4. Remove verified state and anchor scripts (global DNS/clock/NTP are untouched)
 /system script remove $stateSid
 /system script remove $anchorSid
 

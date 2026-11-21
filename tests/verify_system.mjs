@@ -86,6 +86,13 @@ assert.ok(deployRsc.includes('list=\\"rawad-verified\\" && address=\\$rIp && com
 assert.match(rollbackRsc, /\/system script remove \$stateSid/);
 assert.match(rollbackRsc, /\/system script remove \$anchorSid/);
 assert.match(rollbackRsc, /\$rawadCreatedSched = true/);
+assert.ok(!/\/ip dns set\b/.test(deployRsc), 'deploy.rsc must NOT mutate global /ip dns');
+assert.ok(!/\/system clock set\b/.test(deployRsc), 'deploy.rsc must NOT mutate global /system clock');
+assert.ok(!/\/system ntp client set\b/.test(deployRsc), 'deploy.rsc must NOT mutate global /system ntp client');
+assert.ok(!/\/ip dns set\b|\/system clock set\b|\/system ntp client set\b/.test(rollbackRsc), 'rollback.rsc must NOT mutate global DNS/clock/NTP');
+assert.match(deployRsc, /\[\/ip dns get allow-remote-requests\] != true/);
+assert.match(deployRsc, /\/ip hotspot walled-garden add[^\n]*server="rawad-guest-hotspot"/);
+assert.match(deployRsc, /\/ip hotspot user add[^\n]*server="rawad-guest-hotspot"/);
 
 assert.ok(!deployRsc.includes('= \\"nothing\\"'), 'RouterOS HTTP checks must NOT accept missing code');
 assert.equal(

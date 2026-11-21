@@ -36,6 +36,7 @@
 :put "=== [5/9] Existing HotSpot, DHCP & VLANs on ether10 ==="
 /ip dhcp-server print where interface="ether10"
 /ip hotspot print where interface="ether10"
+/ip hotspot print where interface!="ether10"
 /interface vlan print where interface="ether10"
 
 :put "=== [6/9] Existing Firewall, NAT & Mangle Rules referencing ether10 ==="
@@ -48,15 +49,19 @@
 :local dnsRemote [/ip dns get allow-remote-requests]
 :put ("Current allow-remote-requests: " . $dnsRemote)
 :if ($dnsRemote = false) do={
-    :put "NOTICE: deploy.rsc will set allow-remote-requests=yes for ether10 DNS. Verify your WAN input firewall drops external TCP/UDP 53 so RouterOS does not act as an open resolver."
+    :put "ABORT_CONDITION: allow-remote-requests=false. deploy.rsc will NOT enable global DNS remote requests and WILL ABORT until pre-audited."
+} else={
+    :put "NOTICE: allow-remote-requests=yes already enabled globally. Audit BOTH IPv4 and IPv6 WAN input firewall rules dropping TCP/UDP 53:"
+    /ipv6 firewall filter print where chain="input"
 }
 
 :put "=== [8/9] Certificates & www-ssl Status ==="
 /certificate print
 /ip service print where name="www-ssl"
 
-:put "=== [9/9] System Clock & NTP Client ==="
+:put "=== [9/9] System Clock & NTP Client (Read-Only) ==="
 /system clock print
 /system ntp client print
+:put "NOTICE: deploy.rsc will NOT modify /system clock or /system ntp client. Verify accurate UTC time manually for Supabase TLS verification."
 
 :put "=== PRE-FLIGHT CHECK COMPLETE (NO CHANGES MADE) ==="

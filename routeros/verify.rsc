@@ -19,8 +19,10 @@
 /ip hotspot user print where name="rawad-gate"
 /ip hotspot walled-garden print where comment="rawad-guest-portal-allow-supabase"
 
-:put "=== [5/5] Verify ether10 Firewall & IPv6 Block ==="
+:put "=== [5/5] Verify ether10 Firewall, NAT, IPv6 Block & Scheduler ==="
 /ip firewall filter print where comment~"rawad-guest-portal"
 /ipv6 firewall filter print where comment~"rawad-guest-portal"
+/ip firewall nat print where comment="rawad-guest-portal-nat"
+/system scheduler print where name="rawad-sync-revocations"
 
 :put "=== VERIFICATION COMPLETE ==="
