@@ -19,6 +19,7 @@ const adminHtml = fs.readFileSync(path.join(root, 'admin/index.html'), 'utf8');
 const adminJs = fs.readFileSync(path.join(root, 'admin/admin.js'), 'utf8');
 const schemaSql = fs.readFileSync(path.join(root, 'supabase/schema.sql'), 'utf8');
 const deployRsc = fs.readFileSync(path.join(root, 'routeros/deploy.rsc'), 'utf8');
+const preflightRsc = fs.readFileSync(path.join(root, 'routeros/preflight.rsc'), 'utf8');
 const rollbackRsc = fs.readFileSync(path.join(root, 'routeros/rollback.rsc'), 'utf8');
 
 // No external CDNs, no service_role key, no localStorage passwords in hotspot/ or admin/
@@ -68,8 +69,13 @@ assert.ok(!/error\.message/.test(portalAuthTs), 'portal-auth must not leak raw D
 
 // RouterOS deploy.rsc enforces ether10 scope, DNS gate, Walled Garden to Supabase, Fail-Closed on-login, and validated revocation ACK
 assert.match(deployRsc, /:local guestIf "ether10"/);
-assert.match(deployRsc, /src-address-list="!rawad-verified" action=drop/);
+assert.match(deployRsc, /hotspot=auth src-address-list="!rawad-verified" action=drop/);
 assert.match(deployRsc, /\/functions\/v1\/verify-mac\?mac=/);
+assert.match(preflightRsc, /rawad-verified-prof/);
+assert.match(preflightRsc, /rawad-gate/);
+assert.match(preflightRsc, /rawad-sync-revocations/);
+assert.ok(!preflightRsc.includes('rawad-api-group'), 'preflight.rsc must check current rawad-* resources instead of legacy API groups');
+assert.match(adminJs, /canManageOperations\(\)\s*\?\s*'<button[\s\S]*data-edit[\s\S]*data-toggle[\s\S]*data-delete-user[\s\S]*:\s*'<span class="muted">عرض فقط<\/span>'/);
 assert.match(deployRsc, /rawad-sync-revocations/);
 assert.match(deployRsc, /x-router-secret:/);
 assert.match(deployRsc, /\\\$validUuid && \\\$validMac && \\\$validIp/);

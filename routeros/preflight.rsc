@@ -26,7 +26,7 @@
     :put "OK: No 192.168.20.x IP conflict detected."
 }
 :if ([:len [/system script find where name="rawad-portal-state"]] = 0) do={
-    :if ([:len [/ip pool find where name="rawad-guest-pool"]] > 0 || [:len [/ip dhcp-server find where name="rawad-guest-dhcp"]] > 0 || [:len [/ip hotspot profile find where name="rawad-hs-prof"]] > 0 || [:len [/ip hotspot find where name="rawad-guest-hotspot"]] > 0 || [:len [/user find where name="rawad-api"]] > 0 || [:len [/user group find where name="rawad-api-group"]] > 0) do={
+    :if ([:len [/ip pool find where name="rawad-guest-pool"]] > 0 || [:len [/ip dhcp-server find where name="rawad-guest-dhcp"]] > 0 || [:len [/ip hotspot profile find where name="rawad-hs-prof"]] > 0 || [:len [/ip hotspot find where name="rawad-guest-hotspot"]] > 0 || [:len [/ip hotspot user profile find where name="rawad-verified-prof"]] > 0 || [:len [/ip hotspot user find where name="rawad-gate"]] > 0 || [:len [/system scheduler find where name="rawad-sync-revocations"]] > 0) do={
         :put "CONFLICT: One or more rawad-* resource names already exist without rawad-portal-state!"
     } else={
         :put "OK: No pre-existing rawad-* resource name conflicts."

@@ -287,7 +287,7 @@
     :set idFwPriv1 [/ip firewall filter add chain=forward in-interface=$guestIf dst-address=192.168.0.0/16 action=drop place-before=0 comment=$cPriv1]
 }
 :if ([:len [/ip firewall filter find where comment=$cUnverified]] = 0) do={
-    :set idFwUnver [/ip firewall filter add chain=forward in-interface=$guestIf src-address-list="!rawad-verified" action=drop place-before=0 comment=$cUnverified]
+    :set idFwUnver [/ip firewall filter add chain=forward in-interface=$guestIf hotspot=auth src-address-list="!rawad-verified" action=drop place-before=0 comment=$cUnverified]
 }
 :if ([:len [/ip firewall filter find where comment=$cDnsTcp]] = 0) do={
     :set idFwDnsTcp [/ip firewall filter add chain=forward in-interface=$guestIf protocol=tcp dst-port=53 action=drop place-before=0 comment=$cDnsTcp]

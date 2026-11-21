@@ -114,10 +114,12 @@
         '</small></td><td>' + durationConfigLabel(u) + '</td><td>' +
         duration(u) + '</td><td>' + badge(u) + '</td><td>' + dateTime(u.started_at) +
         '</td><td>' + (u.is_unlimited ? 'دون انتهاء' : dateTime(u.expires_at)) + '</td><td><div class="row-actions">' +
-        (canManageOperations() ? '<button class="mini-btn edit-btn" data-edit="' + u.id + '">تعديل</button>' : '') +
-        '<button class="mini-btn ' + (u.is_disabled ? 'enable-btn' : 'disable-btn') + '" data-toggle="' + u.id +
-        '" data-disabled="' + (!u.is_disabled) + '">' + action + '</button>' +
-        '<button class="mini-btn delete-btn" data-delete-user="' + u.id + '">حذف نهائي</button></div></td></tr>';
+        (canManageOperations()
+          ? '<button class="mini-btn edit-btn" data-edit="' + u.id + '">تعديل</button>' +
+            '<button class="mini-btn ' + (u.is_disabled ? 'enable-btn' : 'disable-btn') + '" data-toggle="' + u.id +
+            '" data-disabled="' + (!u.is_disabled) + '">' + action + '</button>' +
+            '<button class="mini-btn delete-btn" data-delete-user="' + u.id + '">حذف نهائي</button>'
+          : '<span class="muted">عرض فقط</span>') + '</div></td></tr>';
     }).join('');
     byId('users-empty').classList.toggle('hidden', filtered.length !== 0);
     if (!filtered.length) byId('users-tbody').innerHTML = '';
