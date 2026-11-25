@@ -376,3 +376,16 @@
 | **`8.7` إعادة التشغيل الباردة (`Cold Reboot`)** | إيقاف وتشغيل `Rawad-CHR-Lab` و`RAWAD-WIN10-CLIENT` | عودة `DHCP` (`192.168.88.250`) و`hotspot1` و`rawad-admin-container` (`0 R`) و`rawad-sync-revocations` و`HTTPS 200` مع Production تلقائياً | **`PASS`** |
 | **`9` & `10` الأمن وتنظيف بيانات الاختبار** | Production `stlrolkrqtbhkjztxudd` + CHR Lab | رفض `JWT`/`HMAC`/`MAC`/`RLS`/`RBAC`؛ وحذف كافة البيانات التجريبية (`admins=1: hashim`, `users=0`, `free_quotas=0`, `sessions=0`, `portal_settings=1`) | **`PASS`** |
 | **النشر الميداني على `RB4011` الحقيقي** | راوتر الشركة الفعلي | لم يُتصل به أو يُعدَّل عليه بانتظار `/export` وفحوص `RB-059` | **`BLOCKED`** |
+
+---
+
+## 17. التحقق النهائي للترحيل إلى Production على بيئة VirtualBox القائمة (`RB-064` — 2026-11-26)
+
+| الفحص | النتيجة المُقاسة | الحالة |
+| :--- | :--- | :---: |
+| **مطابقة ملفات CHR مع Git + فحص المراجع** | تطابق `17/17` ملفاً (`admin/` + `hotspot/`) بنسبة `100%`؛ `OLD_REF_RUNTIME_EXIT=1`؛ `portal-auth`, `verify-mac`, `admin-api` `ACTIVE` | **`PASS`** |
+| **الوصول المحلي + لوحة الإدارة (`hashim`)** | `http://192.168.56.2:8088/` يفتح محلياً دون إنترنت عام؛ دخول `hashim` (`POST /admin-api/login [200]` إلى `stlrolkrqtbhkjztxudd`)، ظهور `7` أقسام، `0` أخطاء Console | **`PASS`** |
+| **Captive Portal (`30s` / `60s` / منع إعادة الدخول / بغداد)** | جميع الأصول `200`؛ `30s` قطع فعلي (`delay=9.20s`, `302`)؛ `60s` (`mid=200`, `delay=7.78s`, `302`)؛ إعادة الدخول `403`؛ منتصف الليل `Asia/Baghdad` سليم | **`PASS`** |
+| **الإلغاء من لوحة الإدارة (`hashim` -> CHR -> ACK)** | قطع فعلي (`302`)، `CHR=EMPTY`، `ACK` خلال **`3.15s`**، `0` جلسات يتيمة/مكررة | **`PASS`** |
+| **إعادة التشغيل الباردة (`Cold Reboot`) + نظافة القاعدة** | عودة `rawad-admin-container` (`0 R`) و`hotspot1` و`rawad-sync-revocations` و`DHCP` (`192.168.88.250`) و`ADMIN_HTTP=200`؛ `address-list=0`, `active=0`؛ القاعدة: `admins=1 (hashim)`, `users=0`, `sessions=0` | **`PASS`** |
+| **النشر الميداني على `RB4011` الحقيقي** | غير متصل / غير مختبر عتادياً بانتظار `/export` وفحوص `RB-059` | **`BLOCKED`** |
