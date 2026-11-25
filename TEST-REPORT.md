@@ -389,3 +389,14 @@
 | **الإلغاء من لوحة الإدارة (`hashim` -> CHR -> ACK)** | قطع فعلي (`302`)، `CHR=EMPTY`، `ACK` خلال **`3.15s`**، `0` جلسات يتيمة/مكررة | **`PASS`** |
 | **إعادة التشغيل الباردة (`Cold Reboot`) + نظافة القاعدة** | عودة `rawad-admin-container` (`0 R`) و`hotspot1` و`rawad-sync-revocations` و`DHCP` (`192.168.88.250`) و`ADMIN_HTTP=200`؛ `address-list=0`, `active=0`؛ القاعدة: `admins=1 (hashim)`, `users=0`, `sessions=0` | **`PASS`** |
 | **النشر الميداني على `RB4011` الحقيقي** | غير متصل / غير مختبر عتادياً بانتظار `/export` وفحوص `RB-059` | **`BLOCKED`** |
+
+---
+
+## 18. حزمة النشر اليدوي وتدقيق الجاهزية لراوتر RB4011 (`RB-065` — 2026-11-26)
+
+| الفحص / المخرج | النتيجة المُقاسة | الحالة |
+| :--- | :--- | :---: |
+| **مطابقة `HEAD` وتدقيق الاعتماديات** | `HEAD` و`origin/main` و`origin/field-test-preparation` عند `89f1d8a`؛ `AUDIT_GREP_EXIT=1` (خلو ملفات التشغيل من `efqsmehqnhuzohzjztni` و`busybox` و`172.18.0.*`)؛ جميع الملفات موثّقة نحو `stlrolkrqtbhkjztxudd.supabase.co` | **`PASS`** |
+| **حزمة النشر اليدوي (`docs/RB4011-*`)** | إنشاء [RB4011-MANUAL-DEPLOYMENT-RUNBOOK.md](docs/RB4011-MANUAL-DEPLOYMENT-RUNBOOK.md)، [RB4011-PREFLIGHT-COMMANDS.rsc](docs/RB4011-PREFLIGHT-COMMANDS.rsc)، [RB4011-DEPLOYMENT-CHECKLIST.md](docs/RB4011-DEPLOYMENT-CHECKLIST.md)، و[RB4011-ROLLBACK.md](docs/RB4011-ROLLBACK.md) بمصفوفة مخاطر صريحة ودون قيم تخمينية | **`PASS`** |
+| **فحص `verify_system.mjs` وفحص الأسرار** | اجتياز الفحوص الساكنة (`ALL SYSTEM VERIFICATIONS PASSED`؛ PG المحلي `SKIPPED`) ونظافة المستودع من الأسرار (`GREP_EXIT=1`) | **`PASS`** |
+| **النشر الفعلي على `RB4011iGS+RM`** | لم يُتصل بالراوتر ولم يُختبر `ARM32`/`ether10` الفعلي بانتظار تشغيل `RB4011-PREFLIGHT-COMMANDS.rsc` ومراجعة `/export` | **`BLOCKED`** |

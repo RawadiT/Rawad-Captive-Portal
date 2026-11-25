@@ -198,7 +198,7 @@
 
 - **المتطلبات السابقة قبل مجرد البدء:** استلام ومراجعة `/export` الفعلي + حل جميع ملاحظات العزل `[ج]` + *(مكتمل في `RB-062`: تجهيز قاعدة ودوال وأسرار Supabase Production `stlrolkrqtbhkjztxudd` بمفاتيح إنتاجية جديدة والتحقق من جميع مسارات المصادقة والقطع)* + استضافة `admin/` ساكناً داخل شبكة LAN الموظفين (دون حاوية RB4011).
 
-*(وثّقت مراجعة `RB-063` و`RB-064` اكتمال تهيئة حساب المدير الرئيسي `hashim` (`site_owner`) والتحقق الكامل من طبقة Production السحابية (`stlrolkrqtbhkjztxudd`, `eu-west-1`) وتطابق ملفات `CHR Lab` مع Git بنسبة `100%`، مع الإبقاء التام على حالة النشر الفعلي على راوتر `RB4011` **`BLOCKED`** حتى استلام `/export` واستكمال متطلبات `RB-059`.)*
+*(وثّقت مراجعة `RB-063` و`RB-064` و`RB-065` اكتمال تهيئة حساب المدير الرئيسي `hashim` (`site_owner`) والتحقق الكامل من طبقة Production السحابية (`stlrolkrqtbhkjztxudd`, `eu-west-1`) وتطابق ملفات `CHR Lab` مع Git بنسبة `100%`، وتجهيز حزمة النشر اليدوي الكاملة في [docs/RB4011-MANUAL-DEPLOYMENT-RUNBOOK.md](docs/RB4011-MANUAL-DEPLOYMENT-RUNBOOK.md)، مع الإبقاء التام على حالة النشر الفعلي على راوتر `RB4011` **`BLOCKED`** حتى استلام `/export` واستكمال متطلبات `RB-059`.)*
 - **النسخ الاحتياطي الإلزامي (قبل أي لمس):**
   - على `RB4011`: `/export file=rb4011-pre-rawad-backup` و`/system backup save name=rb4011-pre-rawad-backup` ونقلهما خارج الراوتر.
   - على Supabase Production: نسخة `pg_dump` ثلاثية (`Roles`, `Schema`, `Data`) عبر PG 17.
