@@ -228,3 +228,20 @@
   - رفع الملفات المحدثة إلى `/hotspot/` في `Rawad-CHR-Lab` وإضافة `/admin-www/admin/login/index.html` على الحاوية لتحويل `:8088/admin/login` إلى `/` (`302 -> 200 -> /`).
   - تثبيت `VBoxManage modifyvm "RAWAD-WIN10-CLIENT" --cableconnected1 on` أثناء الإيقاف لضمان الاتصال التلقائي بعد كل إقلاع.
 - **النتيجة (`PASS`):** تحققت مطابقة الـ CSS الحاسوبية والمرئية في المتصفح وعمل تسجيل الدخول الإداري (`HTTP 200`)، كما ثبت استمرار كلا الإصلاحين تلقائياً بعد إيقاف بارد كامل وإعادة تشغيل `Rawad-CHR-Lab` و`RAWAD-WIN10-CLIENT`.
+
+---
+
+## تجهيز Supabase Production والاختبارات الحية للانتهاء والقطع ومنتصف الليل (`RB-062`) — 2026-11-25
+
+- **تجهيز مشروع Production (`stlrolkrqtbhkjztxudd` — `Europe (Ireland)` / `eu-west-1`):**
+  - استخراج ومقارنة بنية `Rawad Test` (`efqsmehqnhuzohzjztni`) مع [supabase/schema.sql](supabase/schema.sql) وتأكيد أن الترحيلات السابقة كانت تعديلات فوق المخطط الأساسي؛ لذا تم تنفيذ فحص Dry Run (`BEGIN; ... ROLLBACK;`) ثم تطبيق [supabase/schema.sql](supabase/schema.sql) بالكامل عبر Session Pooler IPv4 (`aws-1-eu-west-1.pooler.supabase.com:5432`، `PostgreSQL 17.12`)، ومزامنة سجل `supabase migration repair --status applied 202611180001 202611180002 202611190001`، وإثبات تطابق 100% في الامتدادات والجداول والأعمدة والقيود والفهارس والـ RLS والدوال والصلاحيات مع `Rawad Test` (مع إبقاء `Rawad Test` سليماً دون تعديل).
+  - توليد 3 أسرار إنتاجية جديدة مستقلة (`ADMIN_TOKEN_SECRET`, `PORTAL_STATUS_SECRET`, `ROUTER_SHARED_SECRET`) دون كشف قيمها، ونشر الدوال الثلاث (`portal-auth`, `verify-mac`, `admin-api` بـ `--no-verify-jwt`) بحالة `ACTIVE`.
+- **تحديث إعدادات التطبيق والمختبر إلى Production:**
+  - تحديث `supabaseUrl` وPublishable Key (`stlrolkrqtbhkjztxudd`) في [admin/index.html](admin/index.html)، [hotspot/login.html](hotspot/login.html)، و[hotspot/status.html](hotspot/status.html)، وتحديث `supabaseHost` في [routeros/deploy.rsc](routeros/deploy.rsc) (مع بقاء `routerSecret` كقيمة نائبة آمنة وبقاء النشر على `RB4011` الحقيقي `BLOCKED`).
+  - تحديث `Rawad-CHR-Lab` (`walled-garden`, `rawad-verified-prof`, `rawad-sync-revocations`, `/admin-www/index.html`, `/hotspot/{login,status}.html`) وإثبات جلب HTTPS `CODE=200`.
+- **نتائج الاختبارات الحية والأمنية (`PASS` بالكامل مع تنظيف تام بعد الانتهاء):**
+  - **Test A (`30` ثانية) وTest B (`60` ثانية) والقطع الفعلي:** فتح الإنترنت الفعلي لـ `RAWAD-WIN10-CLIENT` (`https://example.com -> HTTP 200`)، وبعد انتهاء المدة سُحبت الجلسة وتلقى CHR الإلغاء ونفّذ `ACK` (`9.70s` للـ 30ث و`6.95s` للـ 60ث)، وأُزيل الإدراج من `rawad-verified` و`/ip hotspot active` وانقطع الإنترنت فعلياً (`HTTP 302` من HotSpot).
+  - **Test C (منع إعادة الدخول):** رُفضت محاولات إعادة الدخول بالـ 30ث والـ 60ث بـ `HTTP 403`، وبقي `total_sessions=2, active_sessions=0, pending_acks=0`.
+  - **Test D & E (`Asia/Baghdad` منتصف الليل):** التحقق عبر `request_free_quota` بتوقيت بغداد: منع إعادة الاستخدام قبل `00:00+03:00` (`23:59:50+03:00` -> `allowed=false`) والسماح بجلسة جديدة عند `2026-11-26 00:00:05+03:00` (حتى مع بقاء UTC في 25 نوفمبر) دون إعادة تفعيل الجلسة القديمة.
+  - **اختبارات الأمان:** إثبات قفل `RLS` و`RPC` لـ `anon`، ورفض `JWT` المزور و`subordinate`/`general` (`403`)، ورفض الحساب المعطّل (`403`)، وحماية `verify-mac` (`401`/`400`/`403`) و`HMAC` (`403` لـ MAC آخر أو رمز معدّل).
+  - **التنظيف النهائي:** حذف جميع حسابات وجلسات وحصص الاختبار المؤقتة (`admins=0, users=0, free_quotas=0, sessions=0, portal_settings=1`).

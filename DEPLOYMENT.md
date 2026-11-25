@@ -3,7 +3,12 @@
 > **حالة النشر الإنتاجي الآن (`RB-059` / `RB-060`):** **`BLOCKED`** — يُمنع البدء بالنشر على راوتر الشركة الحقيقي **RB4011** قبل استلام ومراجعة `/export` الفعلي، تدقيق عزل `ether10` و`IPv4 + IPv6 WAN DNS 53`، واجتياز اختبارات عدم التأثير على `ether1–ether9` (راجع [PRODUCTION-READINESS.md](PRODUCTION-READINESS.md)).  
 > **النطاق الرسمي:** يقتصر النظام على المصادقة، فحص `MAC`/الصلاحيات، منح وإلغاء وصول HotSpot، مزامنة `Revocation`/`ACK`، ولوحة الإدارة فقط دون إدارة سرعة الإنترنت أو `Bandwidth`.
 
-1. **إعداد Supabase:**
+1. **بيئة الإنتاج المعتمدة (`RB-062`):**
+   - **المشروع:** `Rawad Internet` (`Rawad Captive Portal`) — `Project Ref`: `stlrolkrqtbhkjztxudd` — المنطقة: `Europe (Ireland) / eu-west-1`.
+   - **اتصال PostgreSQL المعتمد:** `Session Pooler IPv4` على `aws-1-eu-west-1.pooler.supabase.com:5432` (`postgres.stlrolkrqtbhkjztxudd`).
+   - **ملاحظة البدء الأولي:** قاعدة Production (`stlrolkrqtbhkjztxudd`) مهيأة بالكامل (5 جداول، RLS، 8 RPCs، سجل الترحيلات، الأسرار الثلاثة، ودوال `portal-auth`, `verify-mac`, `admin-api`). لإضافة حساب مدير الموقع الأول قبل فتح اللوحة، أدرج صفاً في `public.admins` بتجزئة `pbkdf2:<salt_hex>:<hash_hex>` مع `is_super_admin=true, role='site_owner'`.
+
+2. **إعداد Supabase (لإعادة البناء من الصفر عند الحاجة):**
    - نفّذ [supabase/schema.sql](supabase/schema.sql) في مشروع Supabase (آمن لإعادة التطبيق دون حذف البيانات)، أو طبّق مجلد [supabase/migrations/](supabase/migrations/) عبر `npx supabase db push` على مشروع جديد.
    - إذا طُبّق المخطط مباشرة عبر `psql`/SQL، زامن سجل التتبع ميتاداتياً دون إعادة تطبيق التغييرات عبر: `npx supabase migration repair --status applied 202611180001 202611180002 202611190001 --remote`.
    - انشر Edge Functions الثلاث: `portal-auth`, `verify-mac`, `admin-api`.

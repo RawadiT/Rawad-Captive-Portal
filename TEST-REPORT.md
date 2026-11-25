@@ -345,3 +345,18 @@
 | **تسجيل دخول لوحة التحكم الفعلي عبر UI** | `http://192.168.56.2:8088/` ضد `Rawad Test` | دخول بحساب فحص مؤقت محذوف فوراً (`POST /admin-api/login [200]`, `GET /admin-api/users [200]`)، ظهور `#app-shell` و`.footer .powered-by` بالقيم نفسها، تسجيل خروج سليم، وبقاء الأساس (`admins=2: hashim, testo`, `users=2`, `active_sessions=0`) | **`PASS`** |
 | **إعادة التشغيل الباردة الكاملة (`Cold Reboot`)** | إيقاف كامل `Rawad-CHR-Lab` و`RAWAD-WIN10-CLIENT` ثم إعادة تشغيلهما دون أي أمر يدوي | بعد الإقلاع (`uptime: 1m33s`): حاوية `rawad-admin-container` بحالة `0 R` (`668.0KiB`)، `hotspot1` و`rawad-sync-revocations` يعملان، وقواعد العزل (`rawad-admin-block-*`, `rawad-lab-block-unverified`) سليمة، و`RAWAD-WIN10-CLIENT` نال `192.168.88.250` تلقائياً (`cableconnected1="on"`)؛ وعند فتح `hotspot.rawad.test/login` و`hotspot.rawad.test/admin/login` في Edge استمر عرض التذييل الموحّد ولوحة التحكم الصحيحة بالكامل | **`PASS`** |
 | **الفحوص الساكنة وفحص الأسرار** | `node tests/verify_system.mjs` + `git grep` | `ALL SYSTEM VERIFICATIONS PASSED` (تخطّي فحوص PG المحلية لعدم وجود خادم محلي)؛ وفحص الأسرار نظيف (`GREP_EXIT=1`) | **`PASS`** |
+
+---
+
+## 15. تجهيز واختبار بيئة الإنتاج `Rawad Internet` (`stlrolkrqtbhkjztxudd` — `RB-062` — 2026-11-25)
+
+| الفحص | الهدف / الحساب المؤقت | النتيجة المُقاسة | الحالة |
+| :--- | :--- | :--- | :---: |
+| **تطابق البنية مع `Rawad Test`** | `stlrolkrqtbhkjztxudd` (`eu-west-1`, Session Pooler `5432`) | Dry Run (`ROLLBACK`) + تطبيق [supabase/schema.sql](supabase/schema.sql) + `migration repair` (`202611180001..202611190001`): تطابق 100% في 5 جداول و5 RLS و14 فهرساً و8 دوال وصلاحيات `service_role` | **`PASS`** |
+| **Edge Functions والأسرار** | `portal-auth`, `verify-mac`, `admin-api` (`--no-verify-jwt`) | نشر الـ 3 دوال بحالة `ACTIVE` + 3 أسرار إنتاجية جديدة (`portal-auth GET -> 200`, `verify-mac` دون سر `401`, `admin-api` دون JWT `401`) | **`PASS`** |
+| **Test A (`30` ثانية + قطع عبر CHR)** | `__rb062_30s_*` على `RAWAD-WIN10-CLIENT` | دخول `hsCode=200`, إنترنت فعلي `https://example.com -> 200`, بعد 30ث: `status=expired`, `ack_delay_s=9.70s`, `CHR_AFTER=EMPTY`, قطع فعلي `302` | **`PASS`** |
+| **Test B (`60` ثانية + قطع عبر CHR)** | `__rb062_60s_*` (`duration_minutes=1`) | دخول `200`, إنترنت مستمر عند `~35s` (`200`), بعد 60ث: `status=expired`, `ack_delay_s=6.95s`, `CHR_AFTER=EMPTY`, قطع فعلي `302` | **`PASS`** |
+| **Test C (منع إعادة الدخول)** | إعادة طلب `portal-auth` للحسابين بعد النفاد | رُفض كلاهما بـ `HTTP 403`، `total_sessions=2`, `active_sessions=0`, `pending_acks=0` | **`PASS`** |
+| **Test D & E (`Asia/Baghdad` 00:00)** | `request_free_quota` (`02:62:00:00:00:03`) | قبل منتصف الليل (`23:59:50+03:00`): `allowed=false, rem=0`؛ بعد منتصف الليل (`2026-11-26 00:00:05+03:00`): `allowed=true, is_new=true` وجلسة جديدة (`active_count=1`) | **`PASS`** |
+| **اختبارات الأمان والتكامل** | `RLS`, `RPC`, `JWT`, `RBAC`, `HMAC`, `verify-mac`, `disabled` | حظر `anon` على الجداول الـ5 والـ RPC؛ `401` لـ JWT مزور؛ `403` لـ `subordinate`/`general` والحساب المعطّل وتزوير MAC/HMAC؛ `401`/`400`/`403` لـ `verify-mac` | **`PASS`** |
+| **التنظيف النهائي لـ Production** | حذف حسابات الاختبار المؤقتة | `admins=0, users=0, free_quotas=0, sessions=0, portal_settings=1` (صفر بيانات تجريبية متبقية) | **`PASS`** |

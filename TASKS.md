@@ -113,3 +113,9 @@
 | Task ID | Task Name | Acceptance Criteria | Status |
 | :--- | :--- | :--- | :--- |
 | `RB-061` | Captive Portal Footer Consistency & `/admin/login` Recovery After Reboot | Match `.rawad-powered-by` in `hotspot/assets/style.css` (`#94a3b8`, `10.5px`, `500`, `0.78`, `transparent`, `border: none`, `padding: 0`) + `?v=20261125` cache-buster on `hotspot/{login,status}.html`; diagnose true root cause of `http://hotspot.rawad.test/admin/login` broken page (`Win10 cable="false"` + HotSpot `64873` intercepting `/admin/login` as unstyled `login.html` + BusyBox `404` on `/admin/login`); apply persistent Lab fix + `--cableconnected1 on` + `/admin-www/admin/login/index.html`; verify live CSS, Admin login (`200`), and full cold Lab reboot persistence | `PASSED` (`PASS`) |
+
+## Supabase Production Migration, Config, Live Cutoff & Security Verification (`RB-062`)
+
+| Task ID | Task Name | Acceptance Criteria | Status |
+| :--- | :--- | :--- | :--- |
+| `RB-062` | Full Supabase Production Migration, Edge Functions, Config & Live Cutoff Tests | Linked CLI to `stlrolkrqtbhkjztxudd` (`eu-west-1`), audited `Rawad Test` parity, dry-ran & applied `schema.sql` via Session Pooler IPv4, synced migration history (`202611180001..202611190001`), set 3 fresh Production secrets, deployed `portal-auth`/`verify-mac`/`admin-api`, updated `admin/`, `hotspot/`, `deploy.rsc`, & `CHR Lab`, passed `30s`/`60s` real internet cutoff (`302` post-expiry, `ACK` `9.70s`/`6.95s`), re-login block (`403`), Baghdad midnight (`Test D/E`), RLS/JWT/HMAC/MAC guards, and full test cleanup (`admins=0, users=0, sessions=0`); physical RB4011 remains `BLOCKED` | `PASSED` (Cloud & CHR Lab) / **`BLOCKED`** (Physical RB4011) |

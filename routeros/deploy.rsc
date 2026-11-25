@@ -10,7 +10,7 @@
 :local guestIf "ether10"
 :local guestGw "192.168.20.1"
 :local guestNet "192.168.20.0/24"
-:local supabaseHost "YOUR_PROJECT_ID.supabase.co"
+:local supabaseHost "stlrolkrqtbhkjztxudd.supabase.co"
 :local routerSecret "CHANGE_THIS_STRONG_ROUTER_SECRET"
 
 :local cPriv3 "rawad-guest-portal: drop ether10 to 172.16.0.0/12"
