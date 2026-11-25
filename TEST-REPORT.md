@@ -332,3 +332,16 @@
 3. **السعة الفعلية على `MikroTik RB4011` الحقيقي:** **`NOT TESTED`** — هذه النتائج تقيس الطبقة السحابية فقط ولا تثبت قدرة راوتر الشركة العتادية.
 4. **نظافة القاعدة بعد الـ 15 جولة:** `admins=2`, `users=2`, `rem_sessions=0`, `rem_quotas=0`.
 5. **المزامنة النهائية (`RB-060` — `PASS`):** بعد مراجعة جميع الملفات والفروع، حُدّثت أدلة [DEPLOYMENT.md](DEPLOYMENT.md) و[README.md](README.md) إلى جانب ملفات التتبع الأربعة لعكس حالة `BLOCKED` على RB4011 والسعة السحابية المعتمدة (`400` / هامش `200–250`)، مع التحقق من سلامة الروابط وفحص الأسرار (`GREP_EXIT=1`) واجتياز `verify_system.mjs` (الساكن) وتطابق `main` و`field-test-preparation`.
+
+---
+
+## 14. اختبار تذييل بوابة الزبون واستعادة `/admin/login` بعد إعادة التشغيل الباردة (`RB-061` — 2026-11-25)
+
+| الفحص | الهدف / البيئة | النتيجة المُقاسة | الحالة |
+| :--- | :--- | :--- | :---: |
+| **مطابقة CSS لتذييل البوابة (`login.html` & `status.html`)** | Chromium (`chrome-devtools-mcp`) + CSS مُحدَّث | `.rawad-powered-by`: `color: rgb(148, 163, 184)` (`#94a3b8`)، `fontSize: 10.5px`، `fontWeight: 500`، `opacity: 0.78`، `backgroundColor: rgba(0, 0, 0, 0)`، `borderTopStyle: none`، `paddingTop: 0px` — مطابق 100% للوحة التحكم (`#btn-free` و`#login-form` سليمين، `count=1`) | **`PASS`** |
+| **أصول البوابة على `Rawad-CHR-Lab`** | `RAWAD-WIN10-CLIENT` (`http://hotspot.rawad.test/...`) | `/login`, `/admin/login`, `/assets/style.css?v=20261125`, `/assets/portal.js`, `/md5.js`, `/assets/logo.png`, `/assets/fonts/cairo-arabic.woff2` جميعها `HTTP 200`؛ وعرض بصري سليم لـ `Powered BY Hashim Hasanen` في Edge | **`PASS`** |
+| **توجيه `/admin/login` عبر `:8088` ومن البوابة `:80`** | `http://192.168.56.2:8088/admin/login` + `http://hotspot.rawad.test/admin/login` | `:8088/admin/login` يرجع `302 -> /admin/login/ -> 200 -> /`؛ ومن Win10 Edge يحوّل `/admin/login` إلى `http://hotspot.rawad.test:8088/` ويعرض لوحة التحكم الموحدة الحديثة بصفر أخطاء Console | **`PASS`** |
+| **تسجيل دخول لوحة التحكم الفعلي عبر UI** | `http://192.168.56.2:8088/` ضد `Rawad Test` | دخول بحساب فحص مؤقت محذوف فوراً (`POST /admin-api/login [200]`, `GET /admin-api/users [200]`)، ظهور `#app-shell` و`.footer .powered-by` بالقيم نفسها، تسجيل خروج سليم، وبقاء الأساس (`admins=2: hashim, testo`, `users=2`, `active_sessions=0`) | **`PASS`** |
+| **إعادة التشغيل الباردة الكاملة (`Cold Reboot`)** | إيقاف كامل `Rawad-CHR-Lab` و`RAWAD-WIN10-CLIENT` ثم إعادة تشغيلهما دون أي أمر يدوي | بعد الإقلاع (`uptime: 1m33s`): حاوية `rawad-admin-container` بحالة `0 R` (`668.0KiB`)، `hotspot1` و`rawad-sync-revocations` يعملان، وقواعد العزل (`rawad-admin-block-*`, `rawad-lab-block-unverified`) سليمة، و`RAWAD-WIN10-CLIENT` نال `192.168.88.250` تلقائياً (`cableconnected1="on"`)؛ وعند فتح `hotspot.rawad.test/login` و`hotspot.rawad.test/admin/login` في Edge استمر عرض التذييل الموحّد ولوحة التحكم الصحيحة بالكامل | **`PASS`** |
+| **الفحوص الساكنة وفحص الأسرار** | `node tests/verify_system.mjs` + `git grep` | `ALL SYSTEM VERIFICATIONS PASSED` (تخطّي فحوص PG المحلية لعدم وجود خادم محلي)؛ وفحص الأسرار نظيف (`GREP_EXIT=1`) | **`PASS`** |

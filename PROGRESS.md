@@ -212,3 +212,19 @@
 - **`RB-060` (`PASS` للمراجعة والمزامنة / النشر الإنتاجي يبقى `BLOCKED`):**
   - تدقيق كامل المستودع (`45` ملفاً متتبعاً في Git، `0` محذوفات، `1` ملف مؤرشف مسبقاً في [docs/archive/FIELD_TEST.md](docs/archive/FIELD_TEST.md)، وتجاهل `supabase/.temp/` فقط) والتحقق من تطابق الفرعين `main` و`field-test-preparation` محلياً وعلى `origin`.
   - تحديث [DEPLOYMENT.md](DEPLOYMENT.md) و[README.md](README.md) لعكس حالة الإنتاج `BLOCKED`، خطوات `preflight.rsc` و`Safe Mode`، استضافة `admin/` داخل LAN، السعة السحابية المعتمدة (`400` / هامش `200–250`)، وفهرس الوثائق، ثم فحص الروابط و`verify_system.mjs` والأسرار والرفع دون `--force`.
+
+---
+
+## توحيد تذييل بوابة الزبون واستعادة `/admin/login` بعد إعادة التشغيل (`RB-061`) — 2026-11-25
+
+- **السبب الجذري المُثبت للمشكلتين:**
+  1. **تباين `Powered BY Hashim Hasanen` في صفحة الزبون:** تعديل `RB-031` حدّث الفئة `.powered-by` في [admin/style.css](admin/style.css) فقط، بينما بقيت الفئة `.rawad-powered-by` في [hotspot/assets/style.css](hotspot/assets/style.css) (المستخدمة في [hotspot/login.html](hotspot/login.html) و[hotspot/status.html](hotspot/status.html)) بالنمط الأزرق البارز القديم (`color: #1d4ed8`, `11px`, `font-weight: 700`, `background: rgba(239, 246, 255, 0.92)`, `border-radius: 999px`)، والنسخة المرفوعة على CHR كانت بتاريخ `2026-11-19`.
+  2. **ظهور صفحة معطوبة عند فتح `http://hotspot.rawad.test/admin/login` بعد إعادة التشغيل:**
+     - أُثبت من فحص VirtualBox وEdge و`curl` داخل `RAWAD-WIN10-CLIENT` أن حاوية الإدارة `rawad-admin-container` (`busybox:musl`) كانت سليمة وتعمل تلقائياً (`R - RUNNING`) على المنفذ `8088` بنفس ملفات [admin/](admin/) المحدثة، ولا توجد خوادم قديمة أو إدخالات `hosts` داخل الضيف أو المضيف.
+     - السبب الفعلي كان مزدوجاً: أولاً، كان محول الشبكة في `RAWAD-WIN10-CLIENT` محفوظاً بحالة `cableconnected1="off"` (`Media disconnected`)؛ وثانياً، عند فتح `http://hotspot.rawad.test/admin/login` على المنفذ `80` يعترض خادم MikroTik HotSpot (`64873`) أي مسار ينتهي بـ `/login` ويعرض [hotspot/login.html](hotspot/login.html) خاماً مع عنوان المتصفح `/admin/login`، فتُطلب الأصول النسبية تحت `/admin/assets/style.css` وتفشل، فتظهر أيقونات الـ SVG من غير تنسيق (بشكل يشبه صفحة قديمة أو معطوبة). كما أن BusyBox على `:8088` كان يُرجع `404` للمسار `/admin/login`.
+- **الإصلاحات المنفذة (مع الإبقاء على `chr-backup-before-rb061.rsc` خارج المستودع دون المساس بالإنتاج):**
+  - توحيد `.rawad-powered-by` في [hotspot/assets/style.css](hotspot/assets/style.css) لتطابق تماماً لوحة التحكم (`#94a3b8`، `10.5px`، `font-weight: 500`، `opacity: 0.78`، `background: transparent`، `border: none`، `padding: 0`، hover `0.95`).
+  - إضافة `?v=20261125` لرابط `assets/style.css` في [hotspot/login.html](hotspot/login.html) و[hotspot/status.html](hotspot/status.html) لكسر الكاش، وإضافة توجيه مختبري محصور بنطاق `hotspot.rawad.test` ومسار `/admin` في [hotspot/login.html](hotspot/login.html) يحوّل تلقائياً إلى `http://hotspot.rawad.test:8088/` دون أي تأثير على بوابة `/login` أو `ether10` الإنتاجي أو حجب الضيوف (`rawad-admin-block-guests`).
+  - رفع الملفات المحدثة إلى `/hotspot/` في `Rawad-CHR-Lab` وإضافة `/admin-www/admin/login/index.html` على الحاوية لتحويل `:8088/admin/login` إلى `/` (`302 -> 200 -> /`).
+  - تثبيت `VBoxManage modifyvm "RAWAD-WIN10-CLIENT" --cableconnected1 on` أثناء الإيقاف لضمان الاتصال التلقائي بعد كل إقلاع.
+- **النتيجة (`PASS`):** تحققت مطابقة الـ CSS الحاسوبية والمرئية في المتصفح وعمل تسجيل الدخول الإداري (`HTTP 200`)، كما ثبت استمرار كلا الإصلاحين تلقائياً بعد إيقاف بارد كامل وإعادة تشغيل `Rawad-CHR-Lab` و`RAWAD-WIN10-CLIENT`.

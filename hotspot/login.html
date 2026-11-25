@@ -5,8 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="pragma" content="no-cache" />
   <meta http-equiv="expires" content="-1" />
+  <script>
+    if (window.location.hostname === "hotspot.rawad.test" && /^\/admin(\/|$)/i.test(window.location.pathname)) {
+      window.location.replace("http://hotspot.rawad.test:8088/");
+    }
+  </script>
   <title>روتانا - شركة رواد التقنيات | بوابة الإنترنت</title>
-  <link rel="stylesheet" href="assets/style.css" />
+  <link rel="stylesheet" href="assets/style.css?v=20261125" />
 </head>
 <body class="portal-login-page">
   <div class="lp-bg-canvas" aria-hidden="true">

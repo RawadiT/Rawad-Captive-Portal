@@ -107,3 +107,9 @@
 | :--- | :--- | :--- | :--- |
 | `RB-059` | Production `RB4011` Read-Only Field Readiness Audit | Verified Git baseline & absence of real `/export`; authored Read-Only audit command pack, `ether10` vs `ether1–ether9` risk analysis, unexecuted `Safe Mode` rollout & surgical rollback blueprint, and explicit production blockers (`BLOCKED` / `NOT TESTED`) | `PASSED` (Audit & Plan) / **`BLOCKED`** (Prod Rollout) |
 | `RB-060` | Full Repository Synchronization, Cleanup Verification & Finalization | Audited all 45 tracked files, branches (`main` & `field-test-preparation`), remotes, relative doc/HTML/CSS links & secret scan; updated `DEPLOYMENT.md` & `README.md` to reflect `BLOCKED` status & certified cloud limits; clean non-forced push to `origin` | `PASSED` (`PASS`) |
+
+## Captive Portal Footer Consistency & Admin Dashboard Recovery After Reboot (`RB-061`)
+
+| Task ID | Task Name | Acceptance Criteria | Status |
+| :--- | :--- | :--- | :--- |
+| `RB-061` | Captive Portal Footer Consistency & `/admin/login` Recovery After Reboot | Match `.rawad-powered-by` in `hotspot/assets/style.css` (`#94a3b8`, `10.5px`, `500`, `0.78`, `transparent`, `border: none`, `padding: 0`) + `?v=20261125` cache-buster on `hotspot/{login,status}.html`; diagnose true root cause of `http://hotspot.rawad.test/admin/login` broken page (`Win10 cable="false"` + HotSpot `64873` intercepting `/admin/login` as unstyled `login.html` + BusyBox `404` on `/admin/login`); apply persistent Lab fix + `--cableconnected1 on` + `/admin-www/admin/login/index.html`; verify live CSS, Admin login (`200`), and full cold Lab reboot persistence | `PASSED` (`PASS`) |
