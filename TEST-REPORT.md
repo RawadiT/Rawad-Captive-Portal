@@ -360,3 +360,19 @@
 | **Test D & E (`Asia/Baghdad` 00:00)** | `request_free_quota` (`02:62:00:00:00:03`) | قبل منتصف الليل (`23:59:50+03:00`): `allowed=false, rem=0`؛ بعد منتصف الليل (`2026-11-26 00:00:05+03:00`): `allowed=true, is_new=true` وجلسة جديدة (`active_count=1`) | **`PASS`** |
 | **اختبارات الأمان والتكامل** | `RLS`, `RPC`, `JWT`, `RBAC`, `HMAC`, `verify-mac`, `disabled` | حظر `anon` على الجداول الـ5 والـ RPC؛ `401` لـ JWT مزور؛ `403` لـ `subordinate`/`general` والحساب المعطّل وتزوير MAC/HMAC؛ `401`/`400`/`403` لـ `verify-mac` | **`PASS`** |
 | **التنظيف النهائي لـ Production** | حذف حسابات الاختبار المؤقتة | `admins=0, users=0, free_quotas=0, sessions=0, portal_settings=1` (صفر بيانات تجريبية متبقية) | **`PASS`** |
+
+---
+
+## 16. الاعتماد النهائي لبيئة الإنتاج وتهيئة `hashim` والاختبار الشامل على VMs (`RB-063` — 2026-11-25)
+
+| الفحص | الهدف / البيئة | النتيجة المُقاسة | الحالة |
+| :--- | :--- | :--- | :---: |
+| **تدقيق Production DB والمراجع القديمة** | `stlrolkrqtbhkjztxudd` (`PG 17.12`) + `git grep` | `5` جداول (`RLS=true`)، `8` RPCs، `3` migrations مطابقة؛ وصفر مراجع تشغيلية لـ `efqsmehqnhuzohzjztni` (`RUNTIME_OLD_REF_EXIT=1`) | **`PASS`** |
+| **تهيئة المدير الرئيسي `hashim` + واجهة الإدارة** | `public.admins` + `http://192.168.56.2:8088/` + `admin-api` | إنشاء `hashim` (`site_owner`, `is_super_admin=true`, PBKDF2)؛ دخول UI ناجح (`POST /admin-api/login [200]`, `GET /users [200]`, `0` أخطاء Console، ظهور جميع الأقسام السبعة)؛ دورة CRUD كاملة وحظر `403` لـ `general`/`subordinate` | **`PASS`** |
+| **`8.1` بوابة Captive Portal على Win10 VM** | `RAWAD-WIN10-CLIENT` (`192.168.88.250`) | بوابة `192.168.88.1`، تحويل `http://example.com -> 302`، ربط `stlrolkrqtbhkjztxudd`، وتحميل جميع الأصول الـ `7` بـ `HTTP 200` | **`PASS`** |
+| **`8.2` و`8.3` اختبار `30` ثانية و`60` ثانية** | `Rawad-CHR-Lab` + `RAWAD-WIN10-CLIENT` | إنترنت فعلي (`200`) أثناء الصلاحية، ثم قطع فعلي (`302`) وتنظيف CHR و`ACK` بتأخير **`9.32s`** (`30s`) و**`9.05s`** (`60s`) | **`PASS`** |
+| **`8.4` و`8.5` منع إعادة الدخول ومنتصف الليل** | `portal-auth` + `request_free_quota` (`Asia/Baghdad`) | رفض إعادة الدخول للحسابين (`403`)؛ ومنع الحصة قبل `00:00+03:00` مقابل جلسة جديدة بعد منتصف الليل (`active_count=1`) | **`PASS`** |
+| **`8.6` الإلغاء من لوحة الإدارة (`Revocation`)** | `PATCH /users/:id/status` (`hashim`) -> CHR -> Win10 | إزالة `rawad-verified` و`/ip hotspot active`، قطع فعلي (`302`)، وإتمام `ACK` خلال **`1.11s`** بصفر جلسات يتيمة/مكررة | **`PASS`** |
+| **`8.7` إعادة التشغيل الباردة (`Cold Reboot`)** | إيقاف وتشغيل `Rawad-CHR-Lab` و`RAWAD-WIN10-CLIENT` | عودة `DHCP` (`192.168.88.250`) و`hotspot1` و`rawad-admin-container` (`0 R`) و`rawad-sync-revocations` و`HTTPS 200` مع Production تلقائياً | **`PASS`** |
+| **`9` & `10` الأمن وتنظيف بيانات الاختبار** | Production `stlrolkrqtbhkjztxudd` + CHR Lab | رفض `JWT`/`HMAC`/`MAC`/`RLS`/`RBAC`؛ وحذف كافة البيانات التجريبية (`admins=1: hashim`, `users=0`, `free_quotas=0`, `sessions=0`, `portal_settings=1`) | **`PASS`** |
+| **النشر الميداني على `RB4011` الحقيقي** | راوتر الشركة الفعلي | لم يُتصل به أو يُعدَّل عليه بانتظار `/export` وفحوص `RB-059` | **`BLOCKED`** |

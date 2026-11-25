@@ -119,3 +119,9 @@
 | Task ID | Task Name | Acceptance Criteria | Status |
 | :--- | :--- | :--- | :--- |
 | `RB-062` | Full Supabase Production Migration, Edge Functions, Config & Live Cutoff Tests | Linked CLI to `stlrolkrqtbhkjztxudd` (`eu-west-1`), audited `Rawad Test` parity, dry-ran & applied `schema.sql` via Session Pooler IPv4, synced migration history (`202611180001..202611190001`), set 3 fresh Production secrets, deployed `portal-auth`/`verify-mac`/`admin-api`, updated `admin/`, `hotspot/`, `deploy.rsc`, & `CHR Lab`, passed `30s`/`60s` real internet cutoff (`302` post-expiry, `ACK` `9.70s`/`6.95s`), re-login block (`403`), Baghdad midnight (`Test D/E`), RLS/JWT/HMAC/MAC guards, and full test cleanup (`admins=0, users=0, sessions=0`); physical RB4011 remains `BLOCKED` | `PASSED` (Cloud & CHR Lab) / **`BLOCKED`** (Physical RB4011) |
+
+## Production Finalization, Owner Bootstrap & Full VM E2E Verification (`RB-063`)
+
+| Task ID | Task Name | Acceptance Criteria | Status |
+| :--- | :--- | :--- | :--- |
+| `RB-063` | Production Finalization, `hashim` Owner Bootstrap & Full VM E2E Verification | Verified Production `stlrolkrqtbhkjztxudd` DB (`5` tables, `RLS`, `8` RPCs, `3` migrations) and zero runtime refs to deleted `Rawad Test`; bootstrapped primary owner `hashim` (`site_owner`, `is_super_admin=true`, PBKDF2); verified Admin UI login (`200`, `0` console errors) & 3-tier backend RBAC (`403` guards); verified Captive Portal (`8.1`), `30s`/`60s` real internet cutoff (`9.32s`/`9.05s` delay), `403` re-login block (`8.4`), Baghdad midnight (`8.5`), Admin-initiated revocation cutoff (`1.11s` delay, `8.6`), Cold Reboot persistence (`8.7`), security suite (`9`), and cleanup (`admins=1: hashim`, `users=0`, `sessions=0`); physical RB4011 remains `BLOCKED` | `PASSED` (Production & CHR Lab) / **`BLOCKED`** (Physical RB4011) |

@@ -6,7 +6,7 @@
 1. **بيئة الإنتاج المعتمدة (`RB-062`):**
    - **المشروع:** `Rawad Internet` (`Rawad Captive Portal`) — `Project Ref`: `stlrolkrqtbhkjztxudd` — المنطقة: `Europe (Ireland) / eu-west-1`.
    - **اتصال PostgreSQL المعتمد:** `Session Pooler IPv4` على `aws-1-eu-west-1.pooler.supabase.com:5432` (`postgres.stlrolkrqtbhkjztxudd`).
-   - **ملاحظة البدء الأولي:** قاعدة Production (`stlrolkrqtbhkjztxudd`) مهيأة بالكامل (5 جداول، RLS، 8 RPCs، سجل الترحيلات، الأسرار الثلاثة، ودوال `portal-auth`, `verify-mac`, `admin-api`). لإضافة حساب مدير الموقع الأول قبل فتح اللوحة، أدرج صفاً في `public.admins` بتجزئة `pbkdf2:<salt_hex>:<hash_hex>` مع `is_super_admin=true, role='site_owner'`.
+   - **ملاحظة البدء الأولي:** قاعدة Production (`stlrolkrqtbhkjztxudd`) مهيأة بالكامل (5 جداول، RLS، 8 RPCs، سجل الترحيلات، الأسرار الثلاثة، دوال `portal-auth`, `verify-mac`, `admin-api`، وحساب المدير الرئيسي `hashim` بصلاحية `site_owner` مُنشأ ومختبر في `RB-063`). لإضافة مدراء آخرين لاحقاً، استخدم لوحة الإدارة بحساب `hashim`.
 
 2. **إعداد Supabase (لإعادة البناء من الصفر عند الحاجة):**
    - نفّذ [supabase/schema.sql](supabase/schema.sql) في مشروع Supabase (آمن لإعادة التطبيق دون حذف البيانات)، أو طبّق مجلد [supabase/migrations/](supabase/migrations/) عبر `npx supabase db push` على مشروع جديد.
